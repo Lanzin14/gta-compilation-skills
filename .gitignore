@@ -1,0 +1,4 @@
+projects/*/source/
+projects/*/clips/
+projects/*/output/*.mp4
+*.wav
