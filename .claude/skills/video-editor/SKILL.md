@@ -31,8 +31,14 @@ Quarta etapa: **discovery → viral-moment-analyzer → video-translator → vid
      projects/<slug>/clips/<NN>_<id>.mp4
    ```
    - Sem legenda: remova o trecho `subtitles=...,`.
+   - **Vídeo sem áudio** (ver `has_audio` no `discovery.json`): o clipe sairia sem faixa de som e deixaria um buraco no áudio ao concatenar. Adicione silêncio — insira logo após `-i <source>`:
+     ```
+     -f lavfi -i anullsrc=r=48000:cl=stereo -map 0:v -map 1:a -shortest
+     ```
+     e remova o `-af "loudnorm=..."` (não há o que normalizar).
    - `-ss` antes de `-i` é rápido; como recodificamos, o corte fica preciso.
    - Escape `:` e `'` no `author_handle` dentro do `drawtext`.
+   - Se aparecer `Cannot find a valid font` (comum no ffmpeg do Windows), indique a fonte no `drawtext`: `fontfile='C\:/Windows/Fonts/arial.ttf':` (Linux: `/usr/share/fonts/...`; macOS: `/System/Library/Fonts/Helvetica.ttc`).
    - **Vídeo vertical (altura > largura, comum no X):** em vez de barras pretas, use fundo desfocado. Troque o início do `-vf` (até `fps=30,`) por:
      ```
      split[a][b];[a]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=20:2[bg];\
@@ -51,8 +57,10 @@ Quarta etapa: **discovery → viral-moment-analyzer → video-translator → vid
    ```
 4. **Capítulos**: some as durações (`ffprobe -v error -show_entries format=duration -of csv=p=0 <clip>`) e salve `output/chapters.json`:
    ```json
-   [{ "start": 0.0, "moment_id": "m03", "title": "Capotou na rampa" }]
+   [{ "start": 0.0, "moment_ids": ["m03"], "title": "Capotou na rampa" }]
    ```
+   - O YouTube exige capítulos de **no mínimo 10 s**: se um clipe tiver menos, junte-o ao capítulo seguinte (`moment_ids` com os dois) e use um título que cubra ambos.
+   - O primeiro capítulo começa em `0.0`; se houver intro, ela é o primeiro capítulo.
 5. Opcional: intro/outro do usuário — padronize-os com o mesmo comando do passo 1 (sem legenda/crédito) e coloque no início/fim de `list.txt`.
 
 ## Verificações (obrigatórias antes de concluir)

@@ -19,7 +19,7 @@ Executa as 5 skills em ordem. Cada etapa lê o arquivo da anterior em `projects/
 1. Confirme que há **links de posts do X** (ou do YouTube). Sem links, explique que o X não permite busca automática gratuita e peça que o usuário cole os links dos posts (pode copiar da aba Mídia dos perfis).
 2. Pergunte apenas o que faltar (uma vez, tudo junto):
    - tema/título provisório;
-   - duração alvo (padrão: 8–10 min);
+   - duração alvo (padrão: **6 min**). Vídeos do X rendem ~1 momento de ~20 s cada, então peça links suficientes: `links ≈ duração_alvo_s / 20 × 1,4` (6 min → ~25 links; a folga cobre descartes).
    - palavrões nas legendas: manter ou suavizar (padrão: suavizar).
 3. Verifique as ferramentas: `ffmpeg -version`, `yt-dlp --version`, `whisper --help` (ou `faster-whisper`). Se algo faltar, peça autorização antes de instalar.
 

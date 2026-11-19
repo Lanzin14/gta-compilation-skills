@@ -10,7 +10,7 @@ Primeira etapa do fluxo: **discovery → viral-moment-analyzer → video-transla
 ## Entrada
 - **Links de posts do X** (`https://x.com/<usuario>/status/<id>` ou `twitter.com/...`) — fonte principal.
 - Opcional: links do YouTube.
-- Tema do compilado (ex.: "fails de GTA RP") e quantidade alvo (padrão: os 15 mais virais).
+- Tema do compilado (ex.: "fails de GTA RP") e quantidade alvo (definida pela gta-compilation; padrão: os 25 mais virais, ~1 momento de ~20 s cada para um compilado de 6 min).
 
 ### Limitações do X (explique ao usuário se ele pedir algo diferente)
 - O `yt-dlp` **não busca** no X nem lista os posts de um **perfil**: só baixa posts individuais. Se o usuário mandar um perfil, peça que ele abra o perfil (aba Mídia) e copie os links dos posts com vídeo de GTA.
@@ -29,7 +29,7 @@ Primeira etapa do fluxo: **discovery → viral-moment-analyzer → video-transla
    ```
    - Um post com vários vídeos gera várias linhas (uma por vídeo).
    - Links que falharem: registre em `discovery.json` com `"error"` e avise o usuário (post apagado, protegido ou sem vídeo).
-3. Para cada vídeo, use os campos do `yt-dlp`: `id`, `webpage_url`, `uploader` (nome), `uploader_id` (@), `timestamp`, `duration`, `like_count`, `repost_count`, `comment_count`, `view_count` (pode vir `null`), `height`.
+3. Para cada vídeo, use os campos do `yt-dlp`: `id` (no X é o id da **mídia**, diferente do número do post na URL — num post com vários vídeos, cada um tem seu id), `webpage_url`, `uploader` (nome), `uploader_id` (@), `timestamp`, `duration`, `like_count`, `repost_count`, `comment_count`, `view_count` (pode vir `null`), `height`.
 4. Descarte:
    - vídeos que não sejam gameplay de GTA (confirme pelo texto do post em `description`/`title`; na dúvida, pergunte ao usuário);
    - resolução < 480p ou duração > 10 min;
@@ -40,7 +40,10 @@ Primeira etapa do fluxo: **discovery → viral-moment-analyzer → video-transla
    yt-dlp -f "bv*[height<=1080]+ba/b[height<=1080]/b" --merge-output-format mp4 \
      -o "projects/<slug>/source/%(id)s.%(ext)s" "<url>"
    ```
-   Confira que cada arquivo existe e tem áudio: `ffprobe -v error -show_entries stream=codec_type -of csv=p=0 <arquivo>`.
+   Confira que cada arquivo existe e grave `has_audio` (`true` se a saída abaixo tiver `audio`; muitos vídeos do X são mudos):
+   ```bash
+   ffprobe -v error -show_entries stream=codec_type -of csv=p=0 <arquivo>
+   ```
 
 ## Nota de viralidade (0–100)
 ```
@@ -48,7 +51,7 @@ engajamento = like_count + 2*repost_count + comment_count   (campos null contam 
 horas       = max(1, (agora - timestamp) / 3600)
 velocidade  = engajamento / horas
 ```
-- Normalize `engajamento` e `velocidade` entre os candidatos (0–1, escala logarítmica: `log10(x+1)/log10(max+1)`).
+- Normalize `engajamento` e `velocidade` entre os candidatos (0–1, escala logarítmica: `log10(x+1)/log10(max+1)`). Se `max` for 0 (nenhum candidato com engajamento), o valor normalizado é 0 — evita divisão por zero.
 - `nota = 60*engajamento_norm + 40*velocidade_norm`, arredondada.
 - Se `view_count` existir, mostre-o na tabela, mas não o use na nota (nem sempre vem).
 - Nunca invente métricas: campo ausente fica `null`.
@@ -68,8 +71,9 @@ velocidade  = engajamento / horas
   "created_at": "2026-11-19",
   "videos": [
     {
-      "id": "1858000000000000000",
+      "id": "1857999999999999999",
       "platform": "x",
+      "post_id": "1858000000000000000",
       "url": "https://x.com/usuario/status/1858000000000000000",
       "author": "Nome",
       "author_handle": "@usuario",
@@ -87,7 +91,8 @@ velocidade  = engajamento / horas
       "game": "gta_rp",
       "rights": "unknown",
       "approved": true,
-      "local_path": "projects/<slug>/source/1858000000000000000.mp4",
+      "has_audio": true,
+      "local_path": "projects/<slug>/source/1857999999999999999.mp4",
       "error": null
     }
   ]
