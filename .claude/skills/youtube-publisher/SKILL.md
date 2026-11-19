@@ -8,7 +8,7 @@ description: Prepara título, descrição, tags, capítulos, créditos e demais 
 Última etapa: **discovery → viral-moment-analyzer → video-translator → video-editor → youtube-publisher**.
 
 ## Entrada
-- `projects/<slug>/discovery.json` (canais para créditos).
+- `projects/<slug>/discovery.json` (`author`, `author_handle`, `url` para créditos).
 - `projects/<slug>/moments.json` (resumos dos momentos).
 - `projects/<slug>/output/chapters.json` e `compilation.mp4`.
 
@@ -26,13 +26,13 @@ description: Prepara título, descrição, tags, capítulos, créditos e demais 
    00:18 <...>
 
    🎮 Créditos (assista os originais!)
-   <Canal> — <url do vídeo original>
+   <author> (<author_handle>) — <url do post original>
    ...
 
    #GTA5 #GTARP #<tema>
    ```
    - Capítulos: o primeiro **tem que** ser `00:00`, mínimo 3 capítulos, cada um com ≥ 10 s (regra do YouTube).
-   - Todos os canais usados em `moments.json` devem aparecer nos créditos.
+   - Todos os autores usados em `moments.json` devem aparecer nos créditos.
 3. **Tags**: 10–15 tags, total < 500 caracteres, mistura PT/EN (`gta 5`, `gta rp`, `gta funny moments`, `fails gta`...).
 4. **Thumbnail** (sugestão): extraia o quadro do pico do melhor momento:
    ```bash
@@ -54,7 +54,7 @@ description: Prepara título, descrição, tags, capítulos, créditos e demais 
   "contains_synthetic_media": false,
   "video_file": "compilation.mp4",
   "thumbnail_file": "thumb_base.jpg",
-  "credits": [{ "channel": "...", "url": "..." }],
+  "credits": [{ "author": "...", "author_handle": "@...", "url": "..." }],
   "rights_summary": { "permission_granted": 3, "unknown": 2 }
 }
 ```

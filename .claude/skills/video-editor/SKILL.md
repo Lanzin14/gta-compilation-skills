@@ -9,7 +9,7 @@ Quarta etapa: **discovery → viral-moment-analyzer → video-translator → vid
 
 ## Entrada
 - `projects/<slug>/moments.json` (momentos `selected: true`, na ordem desejada).
-- `projects/<slug>/discovery.json` (nome do canal para o crédito).
+- `projects/<slug>/discovery.json` (`author_handle` para o crédito).
 - Legendas `subs/<id>.pt.srt` (opcional por momento).
 
 ## Pré-requisitos
@@ -17,7 +17,7 @@ Quarta etapa: **discovery → viral-moment-analyzer → video-translator → vid
 
 ## Ordem dos momentos
 - Abra com um dos 2 melhores (gancho nos primeiros 5 s), termine com o melhor de todos.
-- Alterne categorias; evite dois clipes do mesmo canal em sequência.
+- Alterne categorias; evite dois clipes do mesmo autor em sequência.
 
 ## Passos
 1. **Cortar e padronizar cada clipe** (1920x1080, 30 fps, mesmo codec — necessário para concatenar sem erros):
@@ -25,14 +25,20 @@ Quarta etapa: **discovery → viral-moment-analyzer → video-translator → vid
    ffmpeg -ss <start> -to <end> -i <source> \
      -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=30,\
    subtitles=projects/<slug>/subs/<id>.pt.srt:force_style='FontSize=22,Outline=2,MarginV=40',\
-   drawtext=text='@<canal>':x=w-tw-30:y=30:fontsize=28:fontcolor=white:borderw=2" \
+   drawtext=text='<author_handle>':x=w-tw-30:y=30:fontsize=28:fontcolor=white:borderw=2" \
      -af "loudnorm=I=-14:TP=-1.5:LRA=11" -ar 48000 -ac 2 \
      -c:v libx264 -preset medium -crf 20 -c:a aac -b:a 192k \
      projects/<slug>/clips/<NN>_<id>.mp4
    ```
    - Sem legenda: remova o trecho `subtitles=...,`.
    - `-ss` antes de `-i` é rápido; como recodificamos, o corte fica preciso.
-   - Escape `:` e `'` no nome do canal dentro do `drawtext`.
+   - Escape `:` e `'` no `author_handle` dentro do `drawtext`.
+   - **Vídeo vertical (altura > largura, comum no X):** em vez de barras pretas, use fundo desfocado. Troque o início do `-vf` (até `fps=30,`) por:
+     ```
+     split[a][b];[a]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=20:2[bg];\
+     [b]scale=-2:1080[fg];[bg][fg]overlay=(W-w)/2:0,fps=30,
+     ```
+     (descubra a orientação com `ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 <source>`).
 2. **Lista de concatenação** `projects/<slug>/clips/list.txt`:
    ```
    file '01_abc123.mp4'
