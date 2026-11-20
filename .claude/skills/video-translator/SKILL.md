@@ -18,8 +18,9 @@ Terceira etapa: **discovery → viral-moment-analyzer → video-translator → v
 ## Passos
 1. Extraia o áudio só do trecho do momento (mono 16 kHz, formato ideal para o Whisper):
    ```bash
-   ffmpeg -ss <start> -to <end> -i <source> -vn -ac 1 -ar 16000 projects/<slug>/subs/<id>.wav
+   ffmpeg -ss <start> -t <duração> -i <source> -vn -ac 1 -ar 16000 projects/<slug>/subs/<id>.wav
    ```
+   `<duração>` = `end - start`; use os mesmos valores do corte da video-editor, senão a legenda sai fora de sincronia.
 2. Transcreva **sem informar o idioma** (o Whisper detecta sozinho) e gere SRT + JSON:
    ```bash
    whisper projects/<slug>/subs/<id>.wav --model small --task transcribe \

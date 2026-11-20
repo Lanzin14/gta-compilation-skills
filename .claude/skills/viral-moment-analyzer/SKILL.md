@@ -21,8 +21,8 @@ Segunda etapa: **discovery → viral-moment-analyzer → video-translator → vi
    ```
    - `asetnsamples=24000` em 48 kHz = blocos de 0,5 s; `reset=1` zera a medição a cada bloco. Cada `pts_time` no arquivo é o início da janela.
    - Não use `reset=<amostras>`: o `reset` conta *frames* de áudio, e o resultado vira uma média acumulada que esconde os picos.
-   - Ignore janelas abaixo de -60 dB (silêncio/quase silêncio, inclusive `-inf`).
-   - **Pico** = janela ≥ **mediana + 6 dB** (mediana das janelas restantes). Não use média + desvio padrão: trechos mudos inflam o desvio e escondem os gritos, e áudio constante gera picos falsos.
+   - Janelas abaixo de -60 dB (silêncio, inclusive `-inf`) contam como **-60 dB** no cálculo da mediana e nunca são pico.
+   - **Pico** = janela ≥ **mediana + 6 dB**. Assim, num vídeo quase todo mudo a mediana fica em -60 dB e o grito aparece. Não use média + desvio padrão: trechos mudos inflam o desvio e escondem os gritos, e áudio constante gera picos falsos.
 2. **Mudanças bruscas de cena** (batidas, quedas, explosões):
    ```bash
    ffmpeg -i <video> -vf "select='gt(scene,0.4)',showinfo" -f null - 2>&1 | grep pts_time

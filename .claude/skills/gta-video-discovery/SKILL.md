@@ -30,6 +30,7 @@ Primeira etapa do fluxo: **discovery → viral-moment-analyzer → video-transla
    - Um post com vários vídeos gera várias linhas (uma por vídeo).
    - Links que falharem: registre em `discovery.json` com `"error"` e avise o usuário (post apagado, protegido ou sem vídeo).
 3. Para cada vídeo, use os campos do `yt-dlp`: `id` (no X é o id da **mídia**, diferente do número do post na URL — num post com vários vídeos, cada um tem seu id), `webpage_url`, `uploader` (nome), `uploader_id` (@), `timestamp`, `duration`, `like_count`, `repost_count`, `comment_count`, `view_count` (pode vir `null`), `height`.
+   - `post_id`: extraia da URL do post (número depois de `/status/`), pois o `id` do `yt-dlp` é o da mídia.
 4. Descarte:
    - vídeos que não sejam gameplay de GTA (confirme pelo texto do post em `description`/`title`; na dúvida, pergunte ao usuário);
    - resolução < 480p ou duração > 10 min;
