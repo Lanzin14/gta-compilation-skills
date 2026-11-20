@@ -20,3 +20,53 @@ jobs:
 
       - name: Teste ponta a ponta (vídeos sintéticos)
         run: python3 tests/e2e_test.py
+
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sintaxe do setup-windows.ps1 (PowerShell 5.1)
+        shell: powershell
+        run: |
+          $errs = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD\scripts\setup-windows.ps1", [ref]$null, [ref]$errs) | Out-Null
+          if ($errs) { $errs | ForEach-Object { Write-Host "::error::$_" }; exit 1 }
+          Write-Host "Sintaxe OK no PowerShell $($PSVersionTable.PSVersion)"
+
+      - name: Sintaxe do setup-windows.ps1 (PowerShell 7)
+        shell: pwsh
+        run: |
+          $errs = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD\scripts\setup-windows.ps1", [ref]$null, [ref]$errs) | Out-Null
+          if ($errs) { $errs | ForEach-Object { Write-Host "::error::$_" }; exit 1 }
+          Write-Host "Sintaxe OK no PowerShell $($PSVersionTable.PSVersion)"
+
+      - name: PSScriptAnalyzer (erros bloqueiam, avisos só aparecem no log)
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $r = Invoke-ScriptAnalyzer -Path scripts\setup-windows.ps1
+          $r | Format-Table Severity, RuleName, Line, Message -AutoSize -Wrap
+          if ($r | Where-Object Severity -eq 'Error') { exit 1 }
+
+      - name: Executar setup-windows.ps1 (sem Whisper)
+        shell: powershell
+        run: |
+          if (Get-Command winget -ErrorAction SilentlyContinue) {
+            .\scripts\setup-windows.ps1 -SkipWhisper
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          } else {
+            Write-Host "::warning::winget não está disponível nesta máquina do GitHub; o script só teve a sintaxe verificada."
+          }
+
+      - name: Garantir ffmpeg para o teste
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { choco install ffmpeg -y --no-progress }
+          ffmpeg -version | Select-Object -First 1
+
+      - name: Teste ponta a ponta no Windows
+        shell: pwsh
+        run: python tests/e2e_test.py

@@ -102,5 +102,7 @@ velocidade  = engajamento / horas
 
 ## Direitos autorais (obrigatório)
 - Guarde sempre `author_handle` e `url`: a video-editor mostra o `@` no vídeo e a youtube-publisher lista os créditos.
-- Recomende pedir permissão aos autores (resposta ou DM no X) e atualizar `rights`.
+- **Pedidos de permissão:** depois da aprovação da lista, gere `projects/<slug>/permissions.md` com uma mensagem pronta por autor, usando os modelos de [permission-template.md](permission-template.md) no idioma do post (nome do canal: pergunte uma vez ao usuário). Cada item: `@autor`, link do post, mensagem preenchida.
+  - **O usuário envia manualmente** (DM ou resposta). Nunca envie mensagens nem automatize o X.
+  - Quando o usuário disser que enviou ou que recebeu resposta, atualize `rights` conforme a tabela do modelo. Autor que negou: tire o vídeo (`approved: false`).
 - Avise que vídeos com `rights: unknown` podem gerar reivindicação ou strike no YouTube.
