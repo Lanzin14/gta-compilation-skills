@@ -1,0 +1,12 @@
+# Projetos de compilado: vídeos, quadros e textos de terceiros (não versionar)
+projects/
+
+# Cookies do navegador (login do X) — nunca enviar ao GitHub
+*cookie*
+*.cookies
+
+# Áudio temporário
+*.wav
+
+# Python
+__pycache__/
