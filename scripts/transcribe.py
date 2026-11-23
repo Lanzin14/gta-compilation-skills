@@ -103,5 +103,7 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    # O Windows usa cp1252 por padrão: sem isso, acentos das mensagens (stdout E stderr) saem corrompidos.
     sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     sys.exit(main())
