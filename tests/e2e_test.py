@@ -9,7 +9,7 @@ IMPORTANTE: ao mudar um comando ou regra em um SKILL.md, atualize este arquivo t
 Uso:  python3 tests/e2e_test.py [--keep]   (--keep mantém a pasta temporária)
 Requer: ffmpeg/ffprobe com libx264, libass (subtitles) e drawtext.
 """
-import json, math, pathlib, re, shutil, statistics as st, subprocess as sp, sys, tempfile
+import json, math, os, pathlib, re, shutil, statistics as st, subprocess as sp, sys, tempfile
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 failures = []
@@ -24,6 +24,28 @@ def check(ok, msg):
 def sh(cmd, cwd):
     r = sp.run(cmd, shell=True, capture_output=True, text=True, cwd=cwd)
     return r.returncode, r.stdout + r.stderr
+
+
+# Fonte para o drawtext: só é usada se o ffmpeg não achar uma sozinho (comum no Windows).
+# É a mesma correção descrita na skill video-editor.
+FONTFILE = None
+FONT_CANDIDATES = {"nt": "C\\:/Windows/Fonts/arial.ttf",
+                   "posix": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"}
+
+
+def with_font(cmd):
+    return cmd.replace("drawtext=", f"drawtext=fontfile='{FONTFILE}':") if FONTFILE else cmd
+
+
+def sh_drawtext(cmd, cwd):
+    """Roda um comando com drawtext; se faltar fonte, aplica o fontfile da skill e tenta de novo."""
+    global FONTFILE
+    rc, o = sh(with_font(cmd), cwd)
+    if rc and FONTFILE is None and "font" in o.lower():
+        FONTFILE = FONT_CANDIDATES.get(os.name)
+        print(f"  (ffmpeg sem fonte padrão; usando fontfile={FONTFILE}, como manda a skill video-editor)")
+        rc, o = sh(with_font(cmd), cwd)
+    return rc, o
 
 
 def probe(f, entries, cwd):
@@ -185,7 +207,7 @@ def run_pipeline(root):
         silence = "" if v["has_audio"] else "-f lavfi -i anullsrc=r=48000:cl=stereo -map 0:v -map 1:a -shortest"
         loud = '-af "loudnorm=I=-14:TP=-1.5:LRA=11"' if v["has_audio"] else ""
         out = f"projects/teste/clips/{i:02d}_{x['id']}.mp4"
-        rc, o = sh(f'ffmpeg -v error -y -ss {x["start"]} -t {x["end"] - x["start"]:.3f} -i {x["source"]} {silence} '
+        rc, o = sh_drawtext(f'ffmpeg -v error -y -ss {x["start"]} -t {x["end"] - x["start"]:.3f} -i {x["source"]} {silence} '
                    f'-vf "{vf}" {loud} -ar 48000 -ac 2 -c:v libx264 -preset ultrafast -crf 20 -c:a aac -b:a 192k {out}',
                    root)
         check(rc == 0, f"clipe {x['id']} ({'vertical' if v['height'] > v['width'] else 'horizontal'}"
@@ -235,11 +257,44 @@ def run_pipeline(root):
     check(text.splitlines()[1].startswith("00:00"), "descrição começa os capítulos em 00:00")
     check(all(by[k]["author_handle"] in text for k in used), "todos os autores usados estão nos créditos")
 
+    # thumbnail: quadro do pico do melhor momento (o que fecha o compilado), texto via textfile
+    best = order[-1]
+    t_best = sum(x["clip_dur"] for x in order[:-1] if "clip_dur" in x) + (best["peaks"] or [best["clip_dur"] / 2])[0] - best["start"]
+    (P / "output/thumb_text.txt").write_text("NÃO ACREDITO:\nCAPOTOU!", encoding="utf-8")  # acento, ':' e '!'
+    thumb = "projects/teste/output/thumbnail.jpg"
+    rc, o = sh_drawtext(
+        f'ffmpeg -v error -y -ss {t_best:.2f} -i {final} -frames:v 1 -vf "scale=1280:720:force_original_aspect_ratio=increase,'
+        f'crop=1280:720,eq=saturation=1.3:contrast=1.1,drawbox=y=ih*0.55:w=iw:h=ih*0.45:color=black@0.45:t=fill,'
+        f'drawtext=textfile=projects/teste/output/thumb_text.txt:fontsize=120:fontcolor=yellow:borderw=8:'
+        f'bordercolor=black:line_spacing=10:x=50:y=h-th-50" -q:v 2 {thumb}', root)
+    check(rc == 0, "thumbnail gerada" + ("" if rc == 0 else f": {o.strip()[-300:]}"))
+    if rc == 0:
+        check(probe(thumb, "-show_entries stream=width,height", root) == "1280,720", "thumbnail em 1280x720")
+        check((root / thumb).stat().st_size < 2 * 1024 * 1024, "thumbnail com menos de 2 MB (limite do YouTube)")
+
+
+def test_permission_template():
+    print("== Modelos de pedido de permissão")
+    t = (REPO / ".claude/skills/gta-video-discovery/permission-template.md").read_text(encoding="utf-8")
+    msgs = re.findall(r"```\n(.*?)\n```", t, re.S)
+    check(len(msgs) >= 4, f"{len(msgs)} mensagens no modelo")
+    link = "https://x.com/usuario_gta_rp/status/1858000000000000000"
+    fill = {"<@autor>": "@usuario_gta_rp", "<@author>": "@usuario_gta_rp", "<link do post>": link,
+            "<post link>": link, "<enlace>": link, "<nome do canal>": "Canal GTA Brasil",
+            "<channel name>": "Canal GTA Brasil", "<nombre del canal>": "Canal GTA Brasil"}
+    for i, m in enumerate(msgs, 1):
+        for k, v in fill.items():
+            m = m.replace(k, v)
+        n = len(re.sub(r"https://\S+", "x" * 23, m))  # o X conta todo link como 23 caracteres
+        check(n <= 280 and "<" not in m, f"mensagem {i}: {n} caracteres (limite 280), sem campo sem preencher")
+
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")  # o console do Windows não é UTF-8 por padrão
     if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
         sys.exit("ffmpeg/ffprobe não encontrados no PATH")
     test_frontmatter()
+    test_permission_template()
     root = pathlib.Path(tempfile.mkdtemp(prefix="gta-e2e-"))
     try:
         run_pipeline(root)

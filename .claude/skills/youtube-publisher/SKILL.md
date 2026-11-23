@@ -34,11 +34,21 @@ description: Prepara título, descrição, tags, capítulos, créditos e demais 
    - Capítulos: o primeiro **tem que** ser `00:00`, mínimo 3 capítulos, cada um com ≥ 10 s (regra do YouTube).
    - Todos os autores usados em `moments.json` devem aparecer nos créditos.
 3. **Tags**: 10–15 tags, total < 500 caracteres, mistura PT/EN (`gta 5`, `gta rp`, `gta funny moments`, `fails gta`...).
-4. **Thumbnail** (sugestão): extraia o quadro do pico do melhor momento:
-   ```bash
-   ffmpeg -ss <tempo_no_compilado> -i projects/<slug>/output/compilation.mp4 -frames:v 1 -q:v 2 projects/<slug>/output/thumb_base.jpg
-   ```
-   Sugira texto curto (2–4 palavras) para o usuário aplicar no editor de imagem.
+4. **Thumbnail** (gerada automaticamente):
+   1. Escolha o quadro: o pico de áudio/cena do momento de maior nota, convertido para o tempo no compilado (`start` do capítulo + posição do pico dentro do clipe). Prefira um quadro com ação visível, não um corte de cena.
+   2. Proponha 3 textos curtos e deixe o usuário escolher: **2–4 palavras, MAIÚSCULAS, no máx. 2 linhas de até 14 caracteres** (ex.: `CAPOTOU` / `NA RAMPA!`). O texto tem que descrever algo que acontece no vídeo.
+   3. Grave o texto em `projects/<slug>/output/thumb_text.txt` (uma linha por linha da imagem, **sem quebra de linha no final**). Usar `textfile=` evita ter que escapar acentos, `:` e `'`.
+   4. Gere a imagem:
+      ```bash
+      ffmpeg -ss <tempo_no_compilado> -i projects/<slug>/output/compilation.mp4 -frames:v 1 \
+        -vf "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,eq=saturation=1.3:contrast=1.1,\
+      drawbox=y=ih*0.55:w=iw:h=ih*0.45:color=black@0.45:t=fill,\
+      drawtext=textfile=projects/<slug>/output/thumb_text.txt:fontsize=120:fontcolor=yellow:borderw=8:bordercolor=black:line_spacing=10:x=50:y=h-th-50" \
+        -q:v 2 projects/<slug>/output/thumbnail.jpg
+      ```
+      - Faixa escura na metade de baixo + texto amarelo com borda preta: legível em qualquer cena e no celular.
+      - `Cannot find a valid font`: adicione `fontfile=` no `drawtext`, como explicado na skill video-editor.
+   5. Verifique: 1280x720 (`ffprobe -v error -show_entries stream=width,height -of csv=p=0 <arquivo>`) e **menos de 2 MB** (limite do YouTube). Abra a imagem e confira se o texto não saiu cortado; se sair, reduza o `fontsize`.
 5. Salve `metadata.json` e mostre tudo ao usuário para revisão.
 
 ## Saída: `projects/<slug>/output/metadata.json`
@@ -53,7 +63,7 @@ description: Prepara título, descrição, tags, capítulos, créditos e demais 
   "made_for_kids": false,
   "contains_synthetic_media": false,
   "video_file": "compilation.mp4",
-  "thumbnail_file": "thumb_base.jpg",
+  "thumbnail_file": "thumbnail.jpg",
   "credits": [{ "author": "...", "author_handle": "@...", "url": "..." }],
   "rights_summary": { "permission_granted": 3, "unknown": 2 }
 }

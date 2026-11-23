@@ -25,9 +25,9 @@ Executa as 5 skills em ordem. Cada etapa lê o arquivo da anterior em `projects/
 
 ## Execução
 Siga cada skill na ordem acima. Pontos de **parada obrigatória** (espere o usuário aprovar):
-- **Após a etapa 1:** lista dos vídeos ordenados pela nota de viralidade, antes de baixar.
+- **Após a etapa 1:** lista dos vídeos ordenados pela nota de viralidade, antes de baixar. Em seguida, entregue `permissions.md` com as mensagens de pedido de permissão para o usuário enviar.
 - **Após a etapa 2:** momentos escolhidos (vídeo, início–fim, motivo), antes de editar.
-- **Após a etapa 5:** título, descrição e alertas de direitos autorais, antes de qualquer publicação.
+- **Após a etapa 5:** título, texto e imagem da thumbnail, descrição e alertas de direitos autorais, antes de qualquer publicação.
 
 As etapas 3 e 4 rodam sem parada, mas mostre uma amostra das legendas traduzidas.
 
