@@ -22,7 +22,7 @@ Quarta etapa: **discovery → viral-moment-analyzer → video-translator → vid
 ## Passos
 1. **Cortar e padronizar cada clipe** (1920x1080, 30 fps, mesmo codec — necessário para concatenar sem erros):
    ```bash
-   ffmpeg -ss <start> -to <end> -i <source> \
+   ffmpeg -ss <start> -t <duração> -i <source> \
      -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=30,\
    subtitles=projects/<slug>/subs/<id>.pt.srt:force_style='FontSize=22,Outline=2,MarginV=40',\
    drawtext=text='<author_handle>':x=w-tw-30:y=30:fontsize=28:fontcolor=white:borderw=2" \
@@ -36,6 +36,7 @@ Quarta etapa: **discovery → viral-moment-analyzer → video-translator → vid
      -f lavfi -i anullsrc=r=48000:cl=stereo -map 0:v -map 1:a -shortest
      ```
      e remova o `-af "loudnorm=..."` (não há o que normalizar).
+   - `<duração>` = `end - start` (segundos). Use `-t`, não `-to`, antes do `-i`: `-to` como opção de entrada não funciona em versões antigas do ffmpeg.
    - `-ss` antes de `-i` é rápido; como recodificamos, o corte fica preciso.
    - Escape `:` e `'` no `author_handle` dentro do `drawtext`.
    - Se aparecer `Cannot find a valid font` (comum no ffmpeg do Windows), indique a fonte no `drawtext`: `fontfile='C\:/Windows/Fonts/arial.ttf':` (Linux: `/usr/share/fonts/...`; macOS: `/System/Library/Fonts/Helvetica.ttc`).
@@ -60,6 +61,7 @@ Quarta etapa: **discovery → viral-moment-analyzer → video-translator → vid
    [{ "start": 0.0, "moment_ids": ["m03"], "title": "Capotou na rampa" }]
    ```
    - O YouTube exige capítulos de **no mínimo 10 s**: se um clipe tiver menos, junte-o ao capítulo seguinte (`moment_ids` com os dois) e use um título que cubra ambos.
+   - Se o **último** clipe tiver menos de 10 s (não há capítulo seguinte), junte-o ao capítulo **anterior**.
    - O primeiro capítulo começa em `0.0`; se houver intro, ela é o primeiro capítulo.
 5. Opcional: intro/outro do usuário — padronize-os com o mesmo comando do passo 1 (sem legenda/crédito) e coloque no início/fim de `list.txt`.
 
