@@ -136,7 +136,7 @@ def run_pipeline(root):
     print("== 2. viral-moment-analyzer")
     moments = []
     for v in vids:
-        path, sig, peaks = v["local_path"], [], []
+        path, sig, peaks, loudest = v["local_path"], [], [], None
         if v["has_audio"]:
             rms = f"projects/teste/subs/{v['id']}_rms.txt"
             sh(f'ffmpeg -v error -i {path} -af "aresample=48000,asetnsamples=n=24000:p=0,astats=metadata=1:reset=1,'
@@ -147,6 +147,7 @@ def run_pipeline(root):
             win = [(a, max(b, -60.0)) for a, b in win]  # silêncio conta como -60 dB
             med = st.median(b for _, b in win) if win else 0
             peaks = [a for a, b in win if b > -60 and b >= med + 6]
+            loudest = max(((b, a) for a, b in win if a in peaks), default=None)
         _, out = sh(f"ffmpeg -i {path} -vf \"select='gt(scene,0.4)',showinfo\" -f null - 2>&1", root)
         scenes = [float(x) for x in re.findall(r"pts_time:([\d.]+)", out)]
         rc, out = sh(f"ffmpeg -i {path} -af silencedetect=noise=-40dB:d=1 -vf freezedetect=n=0.003:d=1 "
@@ -163,10 +164,17 @@ def run_pipeline(root):
         if scenes: sig.append("scene_change")
         if any(0 < p - q <= 2 for p in peaks for q in peaks + scenes): sig.append("reaction")
         score = 30 * ("audio_peak" in sig) + 25 * ("scene_change" in sig) + 25 * ("reaction" in sig) + 20
+        # peak_time: pico de áudio mais alto; senão 1ª mudança de cena; senão null (regra da skill)
+        in_cut = [s_ for s_ in scenes if start <= s_ <= dur]
+        peak_time = loudest[1] if loudest else (in_cut[0] if in_cut else None)
         moments.append(dict(id=f"m{len(moments)+1:02d}", video_id=v["id"], source=path, start=start,
-                            end=round(dur, 2), score=score, signals=sig, peaks=peaks,
+                            end=round(dur, 2), score=score, signals=sig, peaks=peaks, peak_time=peak_time,
                             selected=bool({"audio_peak", "scene_change"} & set(sig)) and score >= 45))
     m = {x["video_id"]: x for x in moments}
+    check(all(x["peak_time"] is not None and x["start"] <= x["peak_time"] <= x["end"]
+              for x in moments if x["selected"]), "todo momento selecionado tem peak_time dentro do corte")
+    check(11.5 <= m["v1"]["peak_time"] <= 14 and 9.5 <= m["v3"]["peak_time"] <= 10.5,
+          "peak_time no grito (v1) e na mudança de cena do vídeo mudo (v3)")
     check(any(11.5 <= p <= 14 for p in m["v1"]["peaks"]), "v1: grito aos 12 s detectado")
     check(any(8.5 <= p <= 10.5 for p in m["v2"]["peaks"]), "v2: grito aos 9 s detectado mesmo com trecho mudo")
     check(not m["v5"]["peaks"], "v5: sem picos falsos em áudio constante")
@@ -224,6 +232,10 @@ def run_pipeline(root):
     if rc:
         return
     chap, t, pend = [], 0.0, None
+    t_clip = 0.0
+    for x in order:  # clip_start: onde cada clipe começa no compilado (regra da video-editor)
+        if "clip_dur" in x:
+            x["clip_start"] = round(t_clip, 3); t_clip += x["clip_dur"]
     for x in order:
         if "clip_dur" not in x: continue
         if pend: pend["moment_ids"].append(x["id"]); pend["dur"] += x["clip_dur"]
@@ -259,7 +271,8 @@ def run_pipeline(root):
 
     # thumbnail: quadro do pico do melhor momento (o que fecha o compilado), texto via textfile
     best = order[-1]
-    t_best = sum(x["clip_dur"] for x in order[:-1] if "clip_dur" in x) + (best["peaks"] or [best["clip_dur"] / 2])[0] - best["start"]
+    t_best = best["clip_start"] + (best["peak_time"] - best["start"])  # fórmula da youtube-publisher
+    check(best["clip_start"] <= t_best <= best["clip_start"] + best["clip_dur"], "quadro da thumbnail cai dentro do clipe certo")
     (P / "output/thumb_text.txt").write_text("NÃO ACREDITO:\nCAPOTOU!", encoding="utf-8")  # acento, ':' e '!'
     thumb = "projects/teste/output/thumbnail.jpg"
     rc, o = sh_drawtext(

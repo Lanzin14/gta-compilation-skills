@@ -63,6 +63,7 @@ Quarta etapa: **discovery → viral-moment-analyzer → video-translator → vid
    - O YouTube exige capítulos de **no mínimo 10 s**: se um clipe tiver menos, junte-o ao capítulo seguinte (`moment_ids` com os dois) e use um título que cubra ambos.
    - Se o **último** clipe tiver menos de 10 s (não há capítulo seguinte), junte-o ao capítulo **anterior**.
    - O primeiro capítulo começa em `0.0`; se houver intro, ela é o primeiro capítulo.
+   - Grave também em cada momento do `moments.json` o **`clip_start`**: onde o clipe começa no compilado (soma das durações dos clipes anteriores, incluindo a intro). A thumbnail usa esse valor.
 5. Opcional: intro/outro do usuário — padronize-os com o mesmo comando do passo 1 (sem legenda/crédito) e coloque no início/fim de `list.txt`.
 
 ## Verificações (obrigatórias antes de concluir)

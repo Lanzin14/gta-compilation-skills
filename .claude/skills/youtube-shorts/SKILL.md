@@ -14,7 +14,7 @@ Etapa opcional, depois da `video-editor` (ou junto dela). Reaproveita os momento
 
 ## Regras de duração
 - Alvo **15–45 s**; máximo **60 s** (funciona em YouTube, TikTok e Reels).
-- Momento com mais de 60 s: corte em volta do pico (`peaks`/sinais do momento), mantendo 3–5 s antes e 2–3 s depois.
+- Momento com mais de 60 s: corte uma janela de 60 s em volta do `peak_time` do momento (começando 3–5 s antes dele), sem passar de `start`/`end`. Sem `peak_time`, use os primeiros 60 s.
 - Momento com menos de 8 s: não vire Short sozinho (fica fraco); pule-o.
 
 ## Passos

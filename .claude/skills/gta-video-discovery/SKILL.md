@@ -15,7 +15,10 @@ Primeira etapa do fluxo: **discovery → viral-moment-analyzer → video-transla
 ### Limitações do X (explique ao usuário se ele pedir algo diferente)
 - O `yt-dlp` **não busca** no X nem lista os posts de um **perfil**: só baixa posts individuais. Se o usuário mandar um perfil, peça que ele abra o perfil (aba Mídia) e copie os links dos posts com vídeo de GTA.
 - Não raspe a busca do X nem automatize login: viola os termos do X e pode bloquear a conta.
-- Posts sensíveis (NSFW) ou de contas protegidas exigem login. Nesse caso, peça ao usuário um arquivo de cookies exportado do navegador **dele** e use `--cookies <arquivo>`. Nunca salve cookies no repositório.
+- Posts sensíveis (NSFW) ou de contas protegidas exigem login. Use o login que o usuário **já tem** no navegador dele, em uma destas formas (pergunte qual navegador ele usa logado no X):
+  1. `--cookies-from-browser firefox` (ou `edge`, `chrome`): o `yt-dlp` lê os cookies direto do navegador. Feche o navegador antes se der erro de arquivo em uso. No Chrome/Edge recentes a criptografia nova costuma bloquear a leitura; aí use a opção 2.
+  2. `--cookies <arquivo>`: arquivo de cookies exportado pelo usuário (extensão de navegador “cookies.txt”), salvo **fora** do repositório.
+  - Nunca peça senha, nunca automatize login e nunca salve cookies no repositório.
 
 ## Pré-requisitos
 - `yt-dlp` atualizado (`yt-dlp --version`; o X muda com frequência, use `yt-dlp -U` ou `pip install -U yt-dlp`). Se faltar, peça autorização antes de instalar.

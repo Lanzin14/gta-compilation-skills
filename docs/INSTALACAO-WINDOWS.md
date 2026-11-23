@@ -31,7 +31,7 @@ Faça um teste com **3 links** antes de um compilado de verdade:
 
 - [ ] **Teste automático:** `py -3 tests\e2e_test.py` termina com `TODOS OS TESTES PASSARAM`.
 - [ ] **Download:** cole 3 links de posts do X com vídeo de GTA e peça "faz um compilado de teste com esses links". Confira que os vídeos aparecem em `projects\<slug>\source\`.
-  - Erro de login/NSFW: exporte os cookies do seu navegador para um arquivo (ex.: `x-cookies.txt`) **fora do repositório** e passe o caminho quando pedido.
+  - Erro de login/NSFW: diga em qual navegador você está logado no X. Com o **Firefox** o `yt-dlp` lê o login direto (`--cookies-from-browser firefox`). No Chrome/Edge, se der erro, exporte os cookies para um arquivo (ex.: `x-cookies.txt`) **fora do repositório** e passe o caminho quando pedido.
 - [ ] **Métricas:** a tabela mostra curtidas/reposts reais (compare com o post no X).
 - [ ] **Momentos:** os trechos sugeridos são realmente os melhores. Se a detecção errar muito (música alta do jogo), anote — a regra de pico (+6 dB) pode precisar de ajuste.
 - [ ] **Legenda:** um vídeo em inglês recebe legenda PT-BR no tempo certo; um em português não recebe.

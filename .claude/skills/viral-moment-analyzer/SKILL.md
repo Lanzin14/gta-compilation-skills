@@ -37,7 +37,8 @@ Segunda etapa: **discovery → viral-moment-analyzer → video-translator → vi
      ```
      Tempo morto = trecho que está **ao mesmo tempo** em silêncio e com imagem parada, encostado no início ou no fim. Se não houver, não corte.
      Se aparecer só `*_start` sem o `*_end` correspondente, o trecho vai até o fim do vídeo.
-6. Pontue e ordene. Mostre os top momentos ao usuário (timestamps + motivo) para revisão antes da edição.
+6. Grave o **`peak_time`** de cada momento: o início da janela de pico de áudio **mais alta** dentro do corte; sem pico de áudio, a **primeira mudança de cena** dentro do corte; sem nenhum dos dois, `null`. É o instante da ação, usado pela thumbnail (youtube-publisher) e pelos Shorts.
+7. Pontue e ordene. Mostre os top momentos ao usuário (timestamps + motivo) para revisão antes da edição.
 
 ## Pontuação (0–100)
 | Sinal | Peso |
@@ -63,6 +64,7 @@ Penalize (−20) trechos com tela de menu, carregamento, HUD de stream cobrindo 
       "end": 102.0,
       "score": 87,
       "signals": ["audio_peak", "scene_change", "reaction"],
+      "peak_time": 92.0,
       "summary": "Carro capota na rampa e o jogador grita",
       "language": null,
       "needs_translation": null,
@@ -71,7 +73,7 @@ Penalize (−20) trechos com tela de menu, carregamento, HUD de stream cobrindo 
   ]
 }
 ```
-- `start`/`end` em segundos (float).
+- `start`/`end`/`peak_time` em segundos (float), no tempo do **vídeo de origem**; `start ≤ peak_time ≤ end`.
 - `language` e `needs_translation` ficam `null` aqui: a video-translator detecta o idioma e preenche.
 - Considere também `viral_score` do `discovery.json`: em empate, prefira o momento do vídeo mais viral.
 

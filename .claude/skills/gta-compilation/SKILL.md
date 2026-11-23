@@ -41,4 +41,5 @@ As etapas 3 e 4 rodam sem parada, mas mostre uma amostra das legendas traduzidas
 - Caminho do `compilation.mp4`, duração e resolução (via `ffprobe`).
 - Quantos momentos, quantos legendados e de quais idiomas.
 - Vídeos descartados ou com falha, e por quê.
+- Shorts gerados: quantos, caminho de cada um em `output/shorts/` e o título proposto (de `shorts.json`).
 - Lista de autores com `rights: unknown` (risco de Content ID/strike).
