@@ -17,6 +17,7 @@ O script verifica cada ferramenta e só instala o que falta:
 | FFmpeg | Cortar, legendar e juntar os vídeos | `winget` (`Gyan.FFmpeg`) |
 | yt-dlp | Baixar os vídeos do X | `pip` |
 | Whisper | Detectar idioma e transcrever | `pip` (instala também o PyTorch, alguns GB) |
+| faster-whisper | Transcrição várias vezes mais rápida (opcional; se não instalar, usa o Whisper acima) | `pip` |
 
 - Sem o Whisper (para economizar espaço): adicione `-SkipWhisper`.
 - Se aparecer "ainda não está no PATH": feche e abra o terminal e rode o script de novo.
@@ -36,6 +37,7 @@ Faça um teste com **3 links** antes de um compilado de verdade:
 - [ ] **Legenda:** um vídeo em inglês recebe legenda PT-BR no tempo certo; um em português não recebe.
 - [ ] **Crédito:** o `@autor` aparece no canto. Se der `Cannot find a valid font`, a skill `video-editor` explica como indicar a fonte (`C:/Windows/Fonts/arial.ttf`).
 - [ ] **Vídeo final:** `projects\<slug>\output\compilation.mp4` abre, com som em todos os trechos.
+- [ ] **Shorts:** `projects\<slug>\output\shorts\` tem os vídeos verticais; abra um no celular e confira legenda e `@autor` legíveis.
 - [ ] **Publicação:** título, descrição, capítulos e créditos fazem sentido. O envio ao YouTube é manual.
 
 Anote o que falhar e traga para o Claude Code: os ajustes entram nas skills e no `tests\e2e_test.py`.

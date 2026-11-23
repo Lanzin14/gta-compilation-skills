@@ -272,6 +272,62 @@ def run_pipeline(root):
         check(probe(thumb, "-show_entries stream=width,height", root) == "1280,720", "thumbnail em 1280x720")
         check((root / thumb).stat().st_size < 2 * 1024 * 1024, "thumbnail com menos de 2 MB (limite do YouTube)")
 
+    # ---- 6. youtube-shorts ----
+    print("== 6. youtube-shorts")
+    (P / "output/shorts").mkdir(parents=True, exist_ok=True)
+    # um horizontal com legenda (v1), um vertical (v2) e um mudo (v3): cobre todos os caminhos da skill
+    for n, vid in enumerate(("v1", "v2", "v3"), 1):
+        x = next(m for m in moments if m["video_id"] == vid)
+        v = by[vid]
+        start = x["start"]
+        dur = min(x["end"] - x["start"], 60.0)
+        base = ("scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,"
+                if v["height"] > v["width"] else
+                "split[a][b];[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:2[bg];"
+                "[b]scale=1080:-2[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,fps=30,")
+        subs = (f"subtitles={x['subtitle_pt']}:force_style='FontSize=13,Bold=1,Outline=3,MarginV=70,Alignment=2',"
+                if x.get("subtitle_pt") else "")
+        vf = base + subs + f"drawtext=text='{v['author_handle']}':x=(w-tw)/2:y=160:fontsize=48:fontcolor=white:borderw=3"
+        silence = "" if v["has_audio"] else "-f lavfi -i anullsrc=r=48000:cl=stereo -map 0:v -map 1:a -shortest"
+        loud = '-af "loudnorm=I=-14:TP=-1.5:LRA=11"' if v["has_audio"] else ""
+        out = f"projects/teste/output/shorts/{n:02d}_{x['id']}.mp4"
+        rc, o = sh_drawtext(f'ffmpeg -v error -y -ss {start} -t {dur:.3f} -i {x["source"]} {silence} -vf "{vf}" {loud} '
+                            f'-ar 48000 -ac 2 -c:v libx264 -preset ultrafast -crf 20 -c:a aac -b:a 192k '
+                            f'-movflags +faststart {out}', root)
+        tipo = ("vertical" if v["height"] > v["width"] else "horizontal") + \
+               (", mudo" if not v["has_audio"] else "") + (", legenda" if subs else "")
+        check(rc == 0, f"short {x['id']} ({tipo}) renderizado" + ("" if rc == 0 else f": {o.strip()[-300:]}"))
+        if rc:
+            continue
+        info = json.loads(sh(f"ffprobe -v error -show_entries stream=codec_type,width,height "
+                             f"-show_entries format=duration -of json {out}", root)[1])
+        st_ = {s_["codec_type"]: s_ for s_ in info["streams"]}
+        check(st_.get("video", {}).get("width") == 1080 and st_["video"].get("height") == 1920
+              and "audio" in st_ and float(info["format"]["duration"]) <= 60.5,
+              f"short {x['id']}: 1080x1920, com áudio, {float(info['format']['duration']):.1f}s ≤ 60 s")
+
+
+def test_transcribe_script():
+    print("== scripts/transcribe.py")
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("transcribe", REPO / "scripts/transcribe.py")
+    tr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tr)
+    srt = tr.format_srt([{"start": 0.0, "end": 1.2, "text": " No way! "},
+                         {"start": 1.5, "end": 1.5, "text": "tempo inválido"},
+                         {"start": 2.0, "end": 3.0, "text": "   "},
+                         {"start": 3661.25, "end": 3662.0, "text": "Did you see that?"}])
+    check(srt == "1\n00:00:00,000 --> 00:00:01,200\nNo way!\n\n2\n01:01:01,250 --> 01:01:02,000\nDid you see that?\n",
+          "format_srt: numera em sequência, descarta vazios/tempo inválido, formata horas e ms")
+    engine = tr.available_engine("auto")
+    if engine is None:
+        rc = sp.run([sys.executable, str(REPO / "scripts/transcribe.py"), "x.wav", "--out-dir", "x"],
+                    capture_output=True, text=True, encoding="utf-8")
+        check(rc.returncode == 2 and "pip install" in rc.stderr,
+              "sem motor de transcrição: sai com código 2 e explica como instalar")
+    else:
+        print(f"  (motor instalado: {engine}-whisper; transcrição real não é testada aqui)")
+
 
 def test_permission_template():
     print("== Modelos de pedido de permissão")
@@ -295,6 +351,7 @@ def main():
         sys.exit("ffmpeg/ffprobe não encontrados no PATH")
     test_frontmatter()
     test_permission_template()
+    test_transcribe_script()
     root = pathlib.Path(tempfile.mkdtemp(prefix="gta-e2e-"))
     try:
         run_pipeline(root)
