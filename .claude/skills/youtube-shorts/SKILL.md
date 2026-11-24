@@ -26,6 +26,7 @@ Etapa opcional, depois da `video-editor` (ou junto dela). Reaproveita os momento
 - **Horizontal:** vídeo inteiro na largura, centralizado sobre fundo desfocado. **Vertical:** ocupa a tela.
 - **Legenda** no terço de baixo, acima dos botões do app (`FontSize=13,Bold=1,Outline=3,MarginV=70`); **crédito** no topo (`y=160`).
 - **Vídeo mudo:** faixa de silêncio; mesmos cuidados de fonte e corte da video-editor.
+- **Marca do canal** (se configurada): marca d'água centralizada abaixo do crédito e logo; mesmo fps, fade e volume do compilado.
 - `shorts.json`: `file`, `moment_id`, `title`, `description` (sempre com o crédito e o link do post original), `duration_s`.
 
 ## Verificações (obrigatórias)

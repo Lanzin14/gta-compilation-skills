@@ -29,7 +29,9 @@ import re
 import sys
 import time
 
-from . import analysis, ff, ranking, render, rights, timeline, viral
+import shutil
+
+from . import analysis, brand as brandmod, ff, ranking, render, rights, timeline, viral
 from .project import Project, load_json, save_json
 
 
@@ -51,6 +53,40 @@ def _credit_file(proj, v):
     proj.p("credits").mkdir(exist_ok=True)
     proj.p(rel).write_text(rights.credit_text(v), encoding="utf-8")  # sem quebra de linha no fim
     return rel
+
+
+def _brand_assets(proj, brand):
+    """Grava os textos da marca e copia o logo para brand/ no projeto. Devolve (watermark, logo) relativos."""
+    if not brand["active"]:
+        return None, None
+    proj.p("brand").mkdir(exist_ok=True)
+    proj.p("brand", "watermark.txt").write_text(brand["channel_handle"], encoding="utf-8")
+    for kind in ("intro", "outro"):
+        proj.p("brand", f"{kind}.txt").write_text(brandmod.card_text(brand, kind), encoding="utf-8")
+    logo = None
+    if brand.get("logo"):
+        src = pathlib.Path(brand["logo"])
+        src = src if src.is_absolute() else pathlib.Path(__file__).resolve().parent.parent / src
+        if not src.exists():
+            raise SystemExit(_err(f"logo da marca não encontrado: {src}"))
+        shutil.copyfile(src, proj.p("brand", "logo" + src.suffix.lower()))
+        logo = f"brand/logo{src.suffix.lower()}"
+    return "brand/watermark.txt", logo
+
+
+def _encode_moment(proj, m, v, out, vf_fn, brand, preset, start=None, dur=None, faststart=False):
+    start = m["start"] if start is None else start
+    dur = m["end"] - m["start"] if dur is None else dur
+    fade = brand["transition"]["seconds"] if brand["transition"]["type"] == "fade" else None
+    wm, logo = _brand_assets(proj, brand)
+    vf = vf_fn(v, m.get("subtitle_pt"), _credit_file(proj, v), fps=brand["fps"], brand=brand, wm_file=wm,
+               logo_rel=logo, duration=dur, fade=fade)
+    af = None
+    if v["has_audio"]:
+        meas = ff.loudnorm_measure(m["source"], start, dur, cwd=proj.dir) if brand["audio_two_pass"] else None
+        af = render.audio_filter(meas, dur, fade)
+    return ff.run_drawtext(render.encode_args(m["source"], start, dur, v["has_audio"], vf, out,
+                                              preset=preset, faststart=faststart, af=af), cwd=proj.dir)
 
 
 def _used_videos(proj):
@@ -272,18 +308,34 @@ def cmd_render(proj, a):
         order, notes = timeline.smart_order(mom["moments"], list(by.values()))
     if not order:
         return _err("nenhum momento selecionado")
+    brand = brandmod.load_brand(proj.dir)
+    if not brand["active"]:
+        print("aviso: marca do canal desligada (config/brand.json sem channel_handle): sem marca d'água, abertura e tela final")
     entries, lines = [], []
+
+    def add_card(kind, name):
+        if not (brand["active"] and brand[kind]["enabled"]):
+            return
+        _, logo = _brand_assets(proj, brand)
+        rc, o = ff.run_drawtext(render.card_args(brand, kind, f"brand/{kind}.txt", f"clips/{name}", brand["fps"],
+                                                 preset=a.preset, logo_rel=logo), cwd=proj.dir)
+        if rc:
+            raise SystemExit(_err(f"{kind}: {o.strip()[-400:]}"))
+        entries.append({"moment_id": kind, "clip": f"clips/{name}", "clip_dur": ff.media_info(f"clips/{name}", cwd=proj.dir)["duration_s"]})
+        lines.append(f"file '{name}'")
+        print(f"{kind}: clips/{name}")
+
+    add_card("intro", "00_intro.mp4")
     for n, m in enumerate(order, 1):
         v = by[m["video_id"]]
         clip = f"clips/{n:02d}_{m['id']}.mp4"
-        vf = render.compilation_filter(v, m.get("subtitle_pt"), _credit_file(proj, v))
-        rc, o = ff.run_drawtext(render.encode_args(m["source"], m["start"], m["end"] - m["start"], v["has_audio"],
-                                                   vf, clip, preset=a.preset), cwd=proj.dir)
+        rc, o = _encode_moment(proj, m, v, clip, render.compilation_filter, brand, a.preset)
         if rc:
             return _err(f"clipe {m['id']}: {o.strip()[-400:]}")
         entries.append({"moment_id": m["id"], "clip": clip, "clip_dur": ff.media_info(clip, cwd=proj.dir)["duration_s"]})
         lines.append(f"file '{pathlib.Path(clip).name}'")
         print(f"clipe {n}: {clip} ({entries[-1]['clip_dur']}s)")
+    add_card("outro", "99_outro.mp4")
     proj.p("clips", "list.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     rc, o = ff.run(render.concat_args("clips/list.txt", "output/compilation.mp4"), cwd=proj.dir)
     if rc:
@@ -294,9 +346,12 @@ def cmd_render(proj, a):
     for n in notes:
         print(f"ordem: {n}")
     save_json(proj.p("output", "chapters.json"), [{"start": c["start"], "moment_ids": c["moment_ids"], "title": None} for c in chap])
+    save_json(proj.p("output", "brand_used.json"), {k: brand[k] for k in ("active", "channel_handle", "fps", "transition", "audio_two_pass")})
     info = ff.media_info("output/compilation.mp4", cwd=proj.dir)
     total = sum(e["clip_dur"] for e in entries)
     problems = []
+    if round(info["fps"]) != brand["fps"]:
+        problems.append(f"fps {info['fps']} ≠ {brand['fps']}")
     if (info["width"], info["height"]) != (1920, 1080):
         problems.append(f"resolução {info['width']}x{info['height']}")
     if not info["has_audio"]:
@@ -349,14 +404,13 @@ def cmd_shorts(proj, a):
     cands = sorted([m for m in mom["moments"] if m.get("selected") and m["end"] - m["start"] >= 8],
                    key=lambda m: (-m["score"], -by[m["video_id"]]["viral_score"]))[:a.count]
     proj.p("output", "shorts").mkdir(parents=True, exist_ok=True)
+    brand = brandmod.load_brand(proj.dir)
     items = []
     for n, m in enumerate(cands, 1):
         v = by[m["video_id"]]
         start, dur = render.short_window(m)
         out = f"output/shorts/{n:02d}_{m['id']}.mp4"
-        vf = render.short_filter(v, m.get("subtitle_pt"), _credit_file(proj, v))
-        rc, o = ff.run_drawtext(render.encode_args(m["source"], start, dur, v["has_audio"], vf, out,
-                                                   preset=a.preset, faststart=True), cwd=proj.dir)
+        rc, o = _encode_moment(proj, m, v, out, render.short_filter, brand, a.preset, start=start, dur=dur, faststart=True)
         if rc:
             return _err(f"short {m['id']}: {o.strip()[-400:]}")
         info = ff.media_info(out, cwd=proj.dir)

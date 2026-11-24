@@ -26,7 +26,8 @@ Quarta etapa: **discovery → viral-moment-analyzer → video-translator → vid
 
 ## Regras (implementadas em `gtakit/render.py` e `gtakit/timeline.py`)
 - **Ordem** (`--order smart`, padrão; `gtakit/timeline.py`): **fecha com o melhor** (maior nota final); **abre com um gancho** (mais energia — reação + retenção — entre os de nota acima da mediana, de preferência ≤ 30 s); no meio, **nunca o mesmo criador em sequência** (o streamer do `original_creator` conta como a mesma pessoa) quando houver ordem possível, alternando energia e evitando repetir categoria. É determinística, e o porquê fica em `output/timeline.json` (`order_notes`); sem ordem possível, avisa. `--order legacy` usa a regra antiga (abre com o 2º melhor).
-- **Padronização** (necessária para juntar sem recodificar): 1920x1080, 30 fps, H.264 `-crf 20`, AAC 192 kbps 48 kHz estéreo, volume normalizado (`loudnorm=I=-14:TP=-1.5:LRA=11`).
+- **Padronização** (necessária para juntar sem recodificar): 1920x1080, 30 ou 60 fps (`config/brand.json`), SAR 1:1, yuv420p, H.264 `-crf 20`, AAC 192 kbps 48 kHz estéreo, volume normalizado em -14 LUFS (`loudnorm`, em 2 passadas por padrão), fade curto entre clipes.
+- **Marca do canal** ([docs/MARCA.md](../../../docs/MARCA.md)): com `channel_handle` preenchido, entram abertura, marca d'água, logo e tela final. Sem ele, o render avisa e segue sem marca — **pergunte ao usuário o @ do canal**, nunca invente.
 - **Vídeo horizontal:** escala + barras (`pad`). **Vertical:** fundo desfocado do próprio vídeo atrás.
 - **Legenda** (`subtitle_pt`): queimada com `FontSize=22,Outline=2,MarginV=40`. **Crédito:** no canto superior direito, `@autor` ou `criador | clipe @autor` (lido de `credits/<id>.txt` com `expansion=none`: qualquer caractere funciona; emojis são removidos porque a fonte não os desenha).
 - **Vídeo mudo:** recebe faixa de silêncio (sem ela, a junção deixa um buraco no áudio) e não passa pelo `loudnorm`.

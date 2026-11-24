@@ -1,0 +1,14 @@
+{
+ "_doc": "Identidade visual do canal (gtakit/brand.py). Enquanto channel_handle for null, a marca fica desligada (nada é inventado). Ajuste por compilado: projects/<slug>/brand.json. Detalhes em docs/MARCA.md.",
+ "channel_name": null,
+ "channel_handle": null,
+ "colors": {"accent": "#F2B72C", "text": "#FFFFFF", "background": "#101318"},
+ "font_file": null,
+ "logo": null,
+ "watermark": {"enabled": true, "position": "bottom-right", "opacity": 0.65, "size": 34},
+ "intro": {"enabled": true, "seconds": 2.5, "text": "COMPILADO POR\n{handle}"},
+ "outro": {"enabled": true, "seconds": 5, "text": "INSCREVA-SE\n{handle}"},
+ "fps": 30,
+ "audio_two_pass": true,
+ "transition": {"type": "fade", "seconds": 0.25}
+}

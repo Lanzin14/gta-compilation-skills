@@ -22,6 +22,9 @@ gta-video-discovery → viral-moment-analyzer → video-translator → video-edi
 
 Os arquivos de cada compilado ficam em `projects/<slug>/`. A execução de cada etapa fica no pacote `gtakit/` (`py -3 -m gtakit --help`); as skills dizem ao Claude o que decidir e quando chamar cada comando.
 
+## Marca do canal
+Preencha `channel_handle` (e, se quiser, `logo`, cores e `fps: 60`) em `config/brand.json` para ter abertura, marca d'água, logo e tela final. Detalhes em [`docs/MARCA.md`](docs/MARCA.md).
+
 ## Requisitos
 - `ffmpeg`
 - `yt-dlp` (`pip install yt-dlp`)
