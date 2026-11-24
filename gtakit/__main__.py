@@ -412,7 +412,9 @@ def cmd_thumbnails(proj, a):
         old.unlink()
     proj.p("output", "thumb_text.txt").write_text("\n".join(a.line), encoding="utf-8")
     cands = thumbs.candidate_times(mom["moments"], tl, a.count)
-    chosen, rejected = thumbs.choose(cands, lambda t: ff.frame_probe("output/compilation.mp4", t, cwd=proj.dir), a.count)
+    probe = lambda t: ff.frame_probe("output/compilation.mp4", t, cwd=proj.dir) + (
+        ff.scene_change_near("output/compilation.mp4", t, cwd=proj.dir),)
+    chosen, rejected = thumbs.choose(cands, probe, a.count)
     for mid, t, why in rejected:
         print(f"  descartado {mid} em {t:.2f}s: {why}")
     if not chosen:

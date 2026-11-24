@@ -179,3 +179,13 @@ def frame_probe(video, t, cwd=None):
         for col in range(8):
             bits = (bits << 1) | (px[row * 9 + col] > px[row * 9 + col + 1])
     return float(y[0]) if y else 0.0, float(b[0]) if b else 0.0, bits
+
+
+def scene_change_near(video, t, window=0.5, cwd=None):
+    """Maior mudança de cena (scdet, 0–100) entre t−window e t+window. Alto = corte/transição por perto."""
+    rc, out = run(["ffmpeg", "-hide_banner", "-nostats", "-ss", f"{max(0.0, t - window):.2f}", "-t", f"{2 * window:.2f}",
+                   "-i", video, "-an", "-vf", "scdet=threshold=100,metadata=print", "-f", "null", "-"], cwd)
+    if rc:
+        raise FFmpegError(f"mudança de cena em {t:.2f}s de {video}: {out.strip()[-300:]}")
+    vals = [float(x) for x in re.findall(r"lavfi\.scd\.score=([\d.]+)", out)]
+    return max(vals) if vals else 0.0

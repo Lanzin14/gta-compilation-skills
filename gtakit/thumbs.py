@@ -1,12 +1,13 @@
 """Thumbnails múltiplas: candidatas de momentos diferentes, filtro de qualidade e folha de comparação.
 
 Para cada um dos melhores momentos usados no compilado, testa o quadro do pico (peak_time) e
-pequenas variações em volta, e fica com o mais nítido. Descarta quadros escuros, borrados ou quase
-iguais a outra candidata. Cada candidata sai em 2 estilos; o usuário escolhe pela folha numerada.
+pequenas variações em volta, e fica com o mais nítido. Descarta quadros escuros, borrados, perto de um
+corte/transição de cena (imagem dupla) ou quase iguais a outra candidata. Cada candidata sai em 2 estilos; o usuário escolhe pela folha numerada.
 """
-OFFSETS = (0.0, 0.5, -0.5, 1.0)
+OFFSETS = (0.0, 0.5, -0.5, 1.0, -1.0, 1.5, 2.0)
 DARK_YAVG = 40.0
 BLURRY = 12.0
+SCENE_CUT = 6.0    # mudança de cena (scdet) em ±0,5 s acima disso = transição: imagem dupla/borrada
 SAME_HASH = 10
 
 
@@ -25,16 +26,20 @@ def candidate_times(moments, timeline, count):
 
 
 def choose(cands, probe, count):
-    """cands: [(moment_id, [t...])]; probe(t) -> (yavg, blur, hash). Devolve (escolhidas, rejeitadas)."""
+    """cands: [(moment_id, [t...])]; probe(t) -> (yavg, blur, hash, mudança de cena em ±0,5 s).
+    Devolve (escolhidas, rejeitadas)."""
     chosen, rejected = [], []
     for mid, times in cands:
         if len(chosen) >= count:
             break
         best = None
         for t in times:
-            y, blur, h = probe(t)
+            y, blur, h, change = probe(t)
             if y < DARK_YAVG:
                 rejected.append((mid, t, f"escuro (brilho {y:.0f})"))
+                continue
+            if change >= SCENE_CUT:
+                rejected.append((mid, t, f"perto de corte/transição de cena (mudança {change:.1f})"))
                 continue
             if blur > BLURRY:
                 rejected.append((mid, t, f"borrado (índice {blur:.1f})"))
@@ -43,7 +48,8 @@ def choose(cands, probe, count):
                 rejected.append((mid, t, "quase igual a outra candidata"))
                 continue
             if best is None or blur < best["blur"]:
-                best = {"moment_id": mid, "t": round(t, 2), "yavg": round(y, 1), "blur": round(blur, 2), "hash": h}
+                best = {"moment_id": mid, "t": round(t, 2), "yavg": round(y, 1), "blur": round(blur, 2), "hash": h,
+                        "scene_change": round(change, 2)}
         if best:
             chosen.append(best)
     return chosen, rejected

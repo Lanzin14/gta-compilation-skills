@@ -170,15 +170,17 @@ class SmartOrder(unittest.TestCase):
 
 class Thumbnails(unittest.TestCase):
     def test_rejects_dark_blurry_and_repeated_frames_and_keeps_sharpest(self):
-        stats = {1.0: (20.0, 3.0, 0b1111), 1.5: (120.0, 20.0, 0b1111), 2.0: (120.0, 4.0, 0xF0F0F0F0F0F0F0F0),
-                 2.5: (120.0, 2.0, 0xF0F0F0F0F0F0F0F1), 5.0: (110.0, 3.0, 0xF0F0F0F0F0F0F0F0), 9.0: (100.0, 5.0, 0x0F0F)}
-        chosen, rejected = thumbs.choose([("m1", [1.0, 1.5, 2.0, 2.5]), ("m2", [5.0]), ("m3", [9.0])],
-                                         lambda t: stats[t], 3)
+        stats = {1.0: (20.0, 3.0, 0b1111, 1.0), 1.5: (120.0, 20.0, 0b1111, 1.0), 2.0: (120.0, 4.0, 0xF0F0F0F0F0F0F0F0, 1.0),
+                 2.5: (120.0, 2.0, 0xF0F0F0F0F0F0F0F1, 1.0), 5.0: (110.0, 3.0, 0xF0F0F0F0F0F0F0F0, 1.0),
+                 9.0: (100.0, 5.0, 0x0F0F, 1.0), 12.0: (130.0, 1.0, 0x3333, 9.3)}
+        chosen, rejected = thumbs.choose([("m1", [1.0, 1.5, 2.0, 2.5]), ("m2", [5.0]), ("m3", [9.0]), ("m4", [12.0])],
+                                         lambda t: stats[t], 4)
         self.assertEqual([(c["moment_id"], c["t"]) for c in chosen], [("m1", 2.5), ("m3", 9.0)])
         reasons = " ".join(r for _, _, r in rejected)
         self.assertIn("escuro", reasons)
         self.assertIn("borrado", reasons)
         self.assertIn("quase igual", reasons)
+        self.assertIn("transição", reasons)  # o caso real: imagem dupla numa troca de cena (nitidez 'boa', mudança 9,3)
 
     def test_candidate_times_stay_inside_the_clip(self):
         tl = {"clips": [{"moment_id": "a", "clip_start": 10.0, "clip_dur": 5.0}, {"moment_id": "b", "clip_start": 15.0, "clip_dur": 20.0}]}
