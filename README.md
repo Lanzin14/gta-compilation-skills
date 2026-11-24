@@ -14,7 +14,7 @@ gta-video-discovery → viral-moment-analyzer → video-translator → video-edi
 |---|---|
 | `gta-compilation` | Orquestra todas as etapas |
 | `gta-video-discovery` | Baixar vídeos do X e ordenar por viralidade |
-| `viral-moment-analyzer` | Identificar os melhores momentos |
+| `viral-moment-analyzer` | Ranquear os clipes por 6 critérios e escolher os melhores momentos ([como funciona](docs/RANKING.md)) |
 | `video-translator` | Detectar idioma e legendar em PT-BR |
 | `video-editor` | Montar o compilado |
 | `youtube-publisher` | Título, descrição, thumbnail e metadados |

@@ -1,0 +1,95 @@
+{
+ "_doc": "Pesos e limites do ranking de clipes (gtakit/ranking.py). Explicação de cada número em docs/RANKING.md. Para mudar só num compilado, copie para projects/<slug>/ranking.json e edite lá.",
+ "weights": {
+  "viralidade": 0.15,
+  "humor": 0.25,
+  "reacao": 0.15,
+  "contexto": 0.15,
+  "qualidade": 0.15,
+  "retencao": 0.15
+ },
+ "selection": {
+  "min_final": 40,
+  "max_per_video": 3,
+  "target_duration_s": 360
+ },
+ "cut": {
+  "whole_clip_max_s": 90,
+  "min_cut_s": 10,
+  "max_cut_s": 60,
+  "setup_s": 6,
+  "max_setup_s": 25,
+  "speech_gap_s": 1.2,
+  "reaction_tail_max_s": 8,
+  "event_group_gap_s": 3
+ },
+ "reaction": {
+  "range_db_min": 3,
+  "range_db_max": 15
+ },
+ "quality": {
+  "dark_yavg": 40,
+  "blurry": 12,
+  "quiet_lufs": -35,
+  "clip_true_peak_dbfs": -0.1,
+  "silence_ratio_alert": 0.6
+ },
+ "retention": {
+  "hook_s": 3,
+  "ideal_min_s": 15,
+  "ideal_max_s": 60
+ },
+ "duplicates": {
+  "hash_distance": 10,
+  "min_match_ratio": 0.6,
+  "repeat_lag_s": 3,
+  "repeat_ratio_alert": 0.35
+ },
+ "humor_words": {
+  "laugh": [
+   "kkk",
+   "haha",
+   "rsrs",
+   "lol",
+   "lmao",
+   "lmfao",
+   "jaja",
+   "😂",
+   "🤣",
+   "💀"
+  ],
+  "reaction": [
+   "caralho",
+   "porra",
+   "puta",
+   "meu deus",
+   "não acredito",
+   "nao acredito",
+   "que isso",
+   "socorro",
+   "wtf",
+   "what the",
+   "oh my god",
+   "omg",
+   "no way",
+   "holy",
+   "dios mío"
+  ],
+  "post_funny": [
+   "kkkk",
+   "ri demais",
+   "rindo",
+   "engraçad",
+   "chorei de rir",
+   "melhor reação",
+   "que isso",
+   "puta que pariu",
+   "funny",
+   "lmao",
+   "hilarious",
+   "😂",
+   "🤣",
+   "💀"
+  ]
+ }
+}

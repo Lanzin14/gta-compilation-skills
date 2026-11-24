@@ -91,12 +91,17 @@ def run_pipeline(root):
     make_video(f"{src}/v4.mp4", [("t", 3, "low"), ("r", 1, "loud"), ("t", 2, "low")], cwd=root)
     make_video(f"{src}/v5.mp4", [("t", 30, "low")], cwd=root)
     make_video(f"{src}/v6.mp4", [("t", 8, "mute"), ("t", 1, "loud"), ("t", 6, "mute")], cwd=root)
+    # v7: repost do v1 (mesmo vídeo recodificado com outra qualidade, postado por outra pessoa)
+    rc, o = sh(f"ffmpeg -v error -y -i {src}/v1.mp4 -c:v libx264 -preset ultrafast -crf 35 -c:a aac -b:a 96k {src}/v7.mp4", root)
+    if rc:
+        sys.exit(f"Falha ao gerar v7: {o}")
 
     # ---- 1. gta-video-discovery (metadados simulados no formato do yt-dlp --dump-json) ----
     print("== 1. gta-video-discovery")
     fake = {"v1": ("Ana", "ana_gta", 51000, 8200, 640, 48), "v2": ("Beto", "beto_rp", 900, None, 30, 5),
             "v3": ("Caio", "caio", 12000, 1500, None, 200), "v4": ("Dani", "dani", 3000, 200, 50, 20),
-            "v5": ("Edu", "edu", 0, 0, 0, 3), "v6": ("Fê", "fe", 500, 20, 10, 10)}
+            "v5": ("Edu", "edu", 0, 0, 0, 3), "v6": ("Fê", "fe", 500, 20, 10, 10),
+            "v7": ("Repost", "repostador", 300, 5, 2, 30)}
     lines = [json.dumps({"id": vid, "extractor": "twitter", "webpage_url": f"https://x.com/{h}/status/9{i}",
                          "uploader": a, "uploader_id": h, "timestamp": NOW - hours * 3600, "duration": 10,
                          "like_count": l, "repost_count": r, "comment_count": c, "view_count": None,
@@ -136,8 +141,23 @@ def run_pipeline(root):
     check(any(7.5 <= p <= 9 for p in m["v6"]["peaks"]), "v6: grito detectado em vídeo quase todo mudo")
     check(m["v2"]["start"] == 2.0, "v2: 2 s de tempo morto inicial cortados")
     check("scene_change" in m["v3"]["signals"], "v3 (mudo): mudança de cena detectada")
-    check(not m["v5"]["selected"] and all(m[k]["selected"] for k in ("v1", "v2", "v3", "v4", "v6")),
-          "nota mínima descarta só o vídeo sem eventos")
+    check(not m["v5"]["selected"] and "nota final" in m["v5"]["ranking"]["selection_reason"]
+          and all(m[k]["selected"] for k in ("v1", "v2", "v3", "v4", "v6")),
+          "só fica fora o vídeo de nota final baixa (sem viralidade, reação ou contexto) — não por falta de pico")
+    check(m["v7"]["ranking"]["duplicate_of"] == "v1" and not m["v7"]["selected"],
+          "repost recodificado do v1 detectado como duplicado (fica o mais viral)")
+    check(all(set(x["ranking"]["criteria"]) == {"viralidade", "humor", "reacao", "contexto", "qualidade", "retencao"}
+              and x["ranking"]["justification"] for x in moments), "todo momento tem as 6 notas e justificativa")
+    rk = (P / "ranking.md").read_text(encoding="utf-8")
+    check("| 1 |" in rk and "URL original:" in rk, "ranking.md gerado com tabela e detalhes")
+    # avaliação do Claude (com motivo) muda só o critério avaliado, sem medir de novo
+    (P / "judgments.json").write_text(json.dumps({"v4": {"humor": {"score": 95, "reason": "fail absurdo da física"}}}), encoding="utf-8")
+    rc, o = gtakit("rank", P)
+    m4 = next(x for x in json.loads((P / "moments.json").read_text(encoding="utf-8"))["moments"] if x["video_id"] == "v4")
+    check(rc == 0 and m4["ranking"]["criteria"]["humor"] == 95 and m4["ranking"]["humor_source"] == "avaliação do Claude",
+          "gtakit rank aplica a avaliação do Claude (judgments.json) com motivo")
+    moments = json.loads((P / "moments.json").read_text(encoding="utf-8"))["moments"]
+    m = {x["video_id"]: x for x in moments}
     rc, o = gtakit("analyze", P)
     check(rc != 0 and "--force" in o, "analyze não apaga moments.json existente sem --force")
 
@@ -178,7 +198,8 @@ def run_pipeline(root):
     check(abs(float(s["video"]["duration"]) - float(s["audio"]["duration"])) < 0.2, "áudio e vídeo sincronizados")
     check(chap and chap[0]["start"] == 0 and len(chap) >= 3 and all(c["dur"] >= 10 for c in chap),
           f"capítulos válidos para o YouTube ({len(chap)}, todos ≥ 10 s, 1º em 00:00)")
-    check([c["moment_id"] for c in clips][-1] == m["v1"]["id"], "compilado fecha com o melhor momento")
+    best_id = max((x for x in moments if x["selected"]), key=lambda x: (x["score"], by[x["video_id"]]["viral_score"]))["id"]
+    check([c["moment_id"] for c in clips][-1] == best_id, "compilado fecha com o melhor momento (maior nota final)")
     check("clip_start" not in json.dumps(json.loads((P / "moments.json").read_text(encoding="utf-8"))),
           "render não escreve no moments.json (clip_start fica no timeline.json)")
     check((P / "credits/v2.txt").read_text(encoding="utf-8") == "d'Ana: 100% {x} | clipe @beto_rp",
@@ -196,7 +217,7 @@ def run_pipeline(root):
     rc, o = gtakit("thumbnail", P, "--line", "NÃO ACREDITO:", "--line", "CAPOTOU!")  # acento, ':' e '!'
     check(rc == 0, "thumbnail gerada" + ("" if rc == 0 else f": {o[-400:]}"))
     if rc == 0:
-        best = next(c for c in clips if c["moment_id"] == m["v1"]["id"])
+        best = next(c for c in clips if c["moment_id"] == best_id)
         t_best = float(re.search(r"quadro em ([\d.]+)s", o).group(1))
         check(best["clip_start"] <= t_best <= best["clip_start"] + best["clip_dur"], "quadro da thumbnail cai dentro do clipe certo")
         check(probe("output/thumbnail.jpg", "-show_entries stream=width,height", P) == "1280,720", "thumbnail em 1280x720")
