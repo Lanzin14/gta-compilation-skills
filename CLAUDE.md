@@ -7,6 +7,7 @@ Skills do Claude Code que produzem compilados de GTA para o YouTube a partir de 
 - `gtakit/` — pacote Python (só stdlib + ffmpeg) com a lógica de cada etapa e a linha de comando `py -3 -m gtakit <comando> projects/<slug>` (rode da raiz do repositório).
 - Fluxo: `gta-video-discovery → viral-moment-analyzer → video-translator → video-editor → youtube-publisher` (+ `youtube-shorts`, opcional).
 - `scripts/transcribe.py` — transcrição + detecção de idioma (faster-whisper, ou openai-whisper como reserva).
+- Marca do canal: `config/brand.json` (`docs/MARCA.md`); sem `channel_handle`, a marca fica desligada — nunca invente o nome do canal.
 - Ranking de clipes: `gtakit/ranking.py`, pesos/limites em `config/ranking.json`, documentação em `docs/RANKING.md` (mudou um número ou regra, atualize o doc e `tests/test_ranking.py`).
 - Cada compilado vive em `projects/<slug>/` (ignorado pelo Git: contém vídeos e textos de terceiros).
 - `tests/test_gtakit.py` — testes de unidade (funções puras, sem ffmpeg).

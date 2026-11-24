@@ -284,6 +284,50 @@ def run_pipeline(root):
     rc, o = gtakit("validate", P)
     check(rc != 0 and "legenda" in o, "validate acusa legenda apagada")
 
+    # ---- identidade visual (marca do canal) ----
+    print("== identidade visual")
+    for x in moments:  # a legenda foi apagada acima; o render com marca segue sem ela
+        x.pop("subtitle_pt", None)
+    (P / "moments.json").write_text(json.dumps({"moments": moments}, ensure_ascii=False, indent=1), encoding="utf-8")
+    sh('ffmpeg -v error -y -f lavfi -i "color=c=0xF2B72C:s=200x200,drawbox=x=50:y=50:w=100:h=100:color=black:t=fill" '
+       '-frames:v 1 logo.png', root)
+    (P / "brand.json").write_text(json.dumps({"channel_handle": "CanalTeste", "logo": str(root / "logo.png"), "fps": 60,
+                                              "transition": {"type": "fade", "seconds": 0.25}}), encoding="utf-8")
+    rc, o = gtakit("render", P, "--preset", "ultrafast")
+    check(rc == 0, "render com marca (abertura, marca d'água, logo, tela final, 60 fps)" + ("" if rc == 0 else f": {o[-600:]}"))
+    if rc == 0:
+        tl = json.loads((P / "output/timeline.json").read_text(encoding="utf-8"))
+        ids = [c["moment_id"] for c in tl["clips"]]
+        info = json.loads(sh("ffprobe -v error -show_entries stream=codec_type,r_frame_rate:format=duration -of json "
+                             "output/compilation.mp4", P)[1])
+        vs = next(s_ for s_ in info["streams"] if s_["codec_type"] == "video")
+        total = sum(c["clip_dur"] for c in tl["clips"])
+        check(ids[0] == "intro" and ids[-1] == "outro", "abertura no início e tela final no fim")
+        check(vs["r_frame_rate"] == "60/1" and abs(float(info["format"]["duration"]) - total) < 1,
+              f"vídeo final em 60 fps com duração = soma das partes ({total:.1f}s)")
+        check((P / "brand/watermark.txt").read_text(encoding="utf-8") == "@CanalTeste", "marca d'água com o @ do canal (@ adicionado)")
+        y_intro = float(re.findall(r"YAVG=([\d.]+)", sh('ffmpeg -ss 1.2 -i output/compilation.mp4 -frames:v 1 '
+                                                       '-vf "crop=200:200:0:0,signalstats,metadata=print" -f null -', P)[1])[0])
+        check(y_intro < 40, f"o 1º segundo é a abertura (fundo escuro da marca, brilho {y_intro:.0f})")
+        ch = tl["chapters"]
+        check(ch[0]["start"] == 0 and all(c["dur"] >= 10 for c in ch), "capítulos continuam válidos com abertura/tela final")
+        louds = []
+        for c in tl["clips"]:
+            mid = c["moment_id"]
+            if mid in ("intro", "outro") or not by[vid_of[mid]]["has_audio"]:
+                continue
+            out = sh(f"ffmpeg -hide_banner -nostats -i {c['clip']} -vn -af ebur128 -f null -", P)[1]
+            louds.append(float(re.findall(r"I:\s+(-?[\d.]+) LUFS", out)[-1]))
+        check(louds and all(abs(x + 14) <= 1.5 for x in louds),
+              f"volume normalizado em 2 passadas: clipes em -14 LUFS ±1,5 ({', '.join(f'{x:.1f}' for x in louds)})")
+    rc, o = gtakit("shorts", P, "--count", "2", "--preset", "ultrafast")
+    sfile = json.loads((P / "output/shorts/shorts.json").read_text(encoding="utf-8"))[0]["file"] if rc == 0 else None
+    if sfile:
+        fr = probe(f"output/shorts/{sfile}", "-select_streams v:0 -show_entries stream=r_frame_rate", P)
+        check(fr == "60/1", "Shorts com marca também em 60 fps")
+    else:
+        check(False, "shorts com marca" + f": {o[-400:]}")
+
 
 def test_transcribe_script():
     print("== scripts/transcribe.py")

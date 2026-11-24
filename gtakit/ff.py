@@ -147,3 +147,16 @@ def frame_hashes(path, fps=2, cwd=None):
                 bits = (bits << 1) | (px[row * 9 + col] > px[row * 9 + col + 1])
         hashes.append(bits)
     return hashes
+
+
+def loudnorm_measure(path, start, duration, cwd=None):
+    """1ª passada do loudnorm: mede o volume do trecho (para a 2ª passada ser precisa). None se falhar."""
+    rc, out = run(["ffmpeg", "-hide_banner", "-nostats", "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", path,
+                   "-vn", "-af", "loudnorm=I=-14:TP=-1.5:LRA=11:print_format=json", "-f", "null", "-"], cwd)
+    if rc:
+        return None
+    block = out[out.rfind("{"):out.rfind("}") + 1]
+    try:
+        return json.loads(block)
+    except ValueError:
+        return None
