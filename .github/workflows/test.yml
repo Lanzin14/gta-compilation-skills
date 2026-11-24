@@ -9,8 +9,18 @@ jobs:
   e2e:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.15"]   # 3.15 = versão usada no Windows do usuário
+    name: e2e (Python ${{ matrix.python }})
     steps:
       - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+          allow-prereleases: true
 
       - name: Instalar ffmpeg e fontes
         run: |
@@ -18,8 +28,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
           ffmpeg -version | head -1
 
+      - name: Testes de unidade (gtakit)
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
       - name: Teste ponta a ponta (vídeos sintéticos)
-        run: python3 tests/e2e_test.py
+        run: python tests/e2e_test.py
 
   windows:
     runs-on: windows-2025
@@ -66,6 +79,10 @@ jobs:
         run: |
           if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { choco install ffmpeg -y --no-progress }
           ffmpeg -version | Select-Object -First 1
+
+      - name: Testes de unidade no Windows
+        shell: pwsh
+        run: python -m unittest discover -s tests -p "test_*.py" -v
 
       - name: Teste ponta a ponta no Windows
         shell: pwsh

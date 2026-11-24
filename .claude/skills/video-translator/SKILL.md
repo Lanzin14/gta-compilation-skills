@@ -16,11 +16,11 @@ Terceira etapa: **discovery → viral-moment-analyzer → video-translator → v
 - Whisper: `faster-whisper` (recomendado: várias vezes mais rápido, sem PyTorch) ou `openai-whisper`. O `scripts/transcribe.py` usa o que estiver instalado. Se nenhum estiver, peça autorização antes de instalar (o modelo `small` baixa ~460 MB no primeiro uso).
 
 ## Passos
-1. Extraia o áudio só do trecho do momento (mono 16 kHz, formato ideal para o Whisper):
+1. Extraia o áudio de cada momento selecionado (mono 16 kHz, formato ideal para o Whisper; vídeos mudos são pulados):
    ```bash
-   ffmpeg -ss <start> -t <duração> -i <source> -vn -ac 1 -ar 16000 projects/<slug>/subs/<id>.wav
+   py -3 -m gtakit audio projects/<slug>
    ```
-   `<duração>` = `end - start`; use os mesmos valores do corte da video-editor, senão a legenda sai fora de sincronia.
+   Gera `subs/<id>.wav` com exatamente o `start`/`end` do momento — os mesmos do corte da video-editor, então a legenda sai sincronizada.
 2. Transcreva **sem informar o idioma** (o Whisper detecta sozinho):
    ```bash
    py -3 scripts/transcribe.py projects/<slug>/subs/<id>.wav --out-dir projects/<slug>/subs/ --model small
@@ -41,7 +41,7 @@ Terceira etapa: **discovery → viral-moment-analyzer → video-translator → v
    - Linguagem natural de gamer brasileiro, curta (máx. 42 caracteres por linha, 2 linhas).
    - Mantenha nomes, gírias de jogo e termos conhecidos ("wasted", "RP", "cop") quando soarem naturais.
    - Palavrões: suavize se o usuário quiser vídeo "family friendly" (pergunte uma vez).
-5. Salve como `projects/<slug>/subs/<id>.pt.srt` e atualize o momento em `moments.json`:
+5. Salve como `projects/<slug>/subs/<id>.pt.srt` e atualize o momento em `moments.json` (caminhos relativos à pasta do projeto; confira depois com `py -3 -m gtakit validate projects/<slug>`):
    ```json
    { "subtitle_original": "subs/m01.en.srt", "subtitle_pt": "subs/m01.pt.srt" }
    ```

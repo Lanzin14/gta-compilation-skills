@@ -24,7 +24,7 @@ Primeira etapa do fluxo: **discovery → viral-moment-analyzer → video-transla
 - `yt-dlp` atualizado (`yt-dlp --version`; o X muda com frequência, use `yt-dlp -U` ou `pip install -U yt-dlp`). Se faltar, peça autorização antes de instalar.
 
 ## Passos
-1. Crie a pasta `projects/<slug>/` (slug = tema em kebab-case + data `AAAAMMDD`) e salve os links recebidos em `projects/<slug>/links.txt` (um por linha).
+1. Crie o projeto com `py -3 -m gtakit init projects/<slug> --theme "<tema>"` (slug = tema em kebab-case + data `AAAAMMDD`) e salve os links recebidos em `projects/<slug>/links.txt` (um por linha).
 2. Colete os metadados **sem baixar o vídeo**:
    ```bash
    yt-dlp --skip-download --dump-json --ignore-errors -a projects/<slug>/links.txt \
@@ -32,24 +32,33 @@ Primeira etapa do fluxo: **discovery → viral-moment-analyzer → video-transla
    ```
    - Um post com vários vídeos gera várias linhas (uma por vídeo).
    - Links que falharem: registre em `discovery.json` com `"error"` e avise o usuário (post apagado, protegido ou sem vídeo).
-3. Para cada vídeo, use os campos do `yt-dlp`: `id` (no X é o id da **mídia**, diferente do número do post na URL — num post com vários vídeos, cada um tem seu id), `webpage_url`, `uploader` (nome), `uploader_id` (@), `timestamp`, `duration`, `like_count`, `repost_count`, `comment_count`, `view_count` (pode vir `null`), `height`.
-   - `post_id`: extraia da URL do post (número depois de `/status/`), pois o `id` do `yt-dlp` é o da mídia.
+3. Gere o `discovery.json` e a tabela ordenada pela nota de viralidade:
+   ```bash
+   py -3 -m gtakit discovery projects/<slug>
+   ```
+   - Lê o `raw_meta.jsonl` e usa os campos do `yt-dlp`: `id` (no X é o id da **mídia**, diferente do número do post — num post com vários vídeos, cada um tem seu id), `webpage_url`, `uploader`, `uploader_id` (@), `timestamp`, `duration`, `width`, `height`, `like_count`, `repost_count`, `comment_count`, `view_count` (pode vir `null`).
+   - `post_id` sai da URL (número depois de `/status/`).
+   - Rodar de novo **preserva** aprovações, `rights` e categorias já gravadas.
 4. Descarte:
    - vídeos que não sejam gameplay de GTA (confirme pelo texto do post em `description`/`title`; na dúvida, pergunte ao usuário);
    - resolução < 480p ou duração > 10 min;
    - reposts de compilados de terceiros.
-5. Calcule a **nota de viralidade** (abaixo), ordene e mostre ao usuário uma tabela (autor, texto curto, curtidas, reposts, nota). **Peça aprovação** antes de baixar.
+5. Mostre ao usuário a tabela impressa pelo comando (nota, autor, curtidas, reposts, views, texto). **Peça aprovação** antes de baixar e registre a decisão:
+   ```bash
+   py -3 -m gtakit approve projects/<slug> <id> <id> ...     # ou --all; recusar: --reject <id>
+   ```
 6. Baixe somente os aprovados:
    ```bash
    yt-dlp -f "bv*[height<=1080]+ba/b[height<=1080]/b" --merge-output-format mp4 \
      -o "projects/<slug>/source/%(id)s.%(ext)s" "<url>"
    ```
-   Confira que cada arquivo existe e grave `has_audio` (`true` se a saída abaixo tiver `audio`; muitos vídeos do X são mudos):
+   Depois confira os arquivos (duração, tamanho, fps, se tem áudio — muitos vídeos do X são mudos):
    ```bash
-   ffprobe -v error -show_entries stream=codec_type -of csv=p=0 <arquivo>
+   py -3 -m gtakit probe projects/<slug>
    ```
+   Ele grava `local_path`, `duration_s`, `width`, `height`, `fps` e `has_audio` e acusa aprovado sem arquivo.
 
-## Nota de viralidade (0–100)
+## Nota de viralidade (0–100) — implementada em `gtakit/viral.py`
 ```
 engajamento = like_count + 2*repost_count + comment_count   (campos null contam 0)
 horas       = max(1, (agora - timestamp) / 3600)
@@ -84,8 +93,11 @@ velocidade  = engajamento / horas
       "author_url": "https://x.com/usuario",
       "text": "texto do post",
       "posted_at": "2026-11-17T20:15:00Z",
+      "timestamp": 1794792663,
       "duration_s": 42.5,
+      "width": 1280,
       "height": 720,
+      "fps": 30.0,
       "likes": 51000,
       "reposts": 8200,
       "comments": 640,
@@ -96,7 +108,7 @@ velocidade  = engajamento / horas
       "rights": "unknown",
       "approved": true,
       "has_audio": true,
-      "local_path": "projects/<slug>/source/1857999999999999999.mp4",
+      "local_path": "source/1857999999999999999.mp4",
       "error": null
     }
   ]

@@ -5,7 +5,18 @@ description: Comando único que produz um compilado de melhores momentos de GTA 
 
 # GTA Compilation (orquestrador)
 
-Executa as 5 skills em ordem. Cada etapa lê o arquivo da anterior em `projects/<slug>/`.
+Executa as skills em ordem. Cada etapa lê o arquivo da anterior em `projects/<slug>/`.
+
+## Ferramenta: `gtakit`
+As partes automáticas de cada etapa rodam pela linha de comando do pacote `gtakit/` (só Python + ffmpeg), sempre a partir da **raiz do repositório**:
+```bash
+py -3 -m gtakit <comando> projects/<slug>      # Windows
+python3 -m gtakit <comando> projects/<slug>    # Linux/macOS
+```
+`init → discovery → approve → probe → analyze → audio → render → thumbnail → shorts`, mais `validate` (confere os JSON entre etapas) e `status` (o que já foi feito). O `--help` de cada comando explica as opções.
+- **Retomar um compilado:** rode `status` e continue da primeira etapa não concluída.
+- **Antes de cada etapa que lê arquivos de outra**, rode `validate`; se apontar problema, corrija antes de seguir.
+- As decisões (o que aprovar, o que é engraçado, a tradução, títulos) continuam sendo suas e do usuário; o `gtakit` só mede, corta e monta.
 
 | # | Skill | Gera |
 |---|---|---|
@@ -24,6 +35,7 @@ Executa as 5 skills em ordem. Cada etapa lê o arquivo da anterior em `projects/
    - palavrões nas legendas: manter ou suavizar (padrão: suavizar);
    - gerar Shorts dos melhores momentos (padrão: sim, 3 Shorts).
 3. Verifique as ferramentas: `ffmpeg -version`, `yt-dlp --version`, `whisper --help` (ou `faster-whisper`). Se algo faltar, peça autorização antes de instalar.
+4. Crie o projeto: `py -3 -m gtakit init projects/<slug> --theme "<tema>"` (slug = tema em kebab-case + data `AAAAMMDD`).
 
 ## Execução
 Siga cada skill na ordem acima. Pontos de **parada obrigatória** (espere o usuário aprovar):

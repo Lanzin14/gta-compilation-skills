@@ -12,52 +12,23 @@ Etapa opcional, depois da `video-editor` (ou junto dela). Reaproveita os momento
 - `projects/<slug>/discovery.json` (`width`/`height` ou orientação, `has_audio`, `author_handle`, `url`).
 - Quantidade de Shorts (padrão: os **3** momentos de maior `score`; em empate, maior `viral_score`).
 
-## Regras de duração
-- Alvo **15–45 s**; máximo **60 s** (funciona em YouTube, TikTok e Reels).
-- Momento com mais de 60 s: corte uma janela de 60 s em volta do `peak_time` do momento (começando 3–5 s antes dele), sem passar de `start`/`end`. Sem `peak_time`, use os primeiros 60 s.
-- Momento com menos de 8 s: não vire Short sozinho (fica fraco); pule-o.
-
 ## Passos
-1. Para cada momento escolhido, descubra a orientação do vídeo de origem (`ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 <source>`).
-2. Monte o início do `-vf` conforme a orientação:
-   - **Horizontal** (largura ≥ altura): vídeo inteiro na largura, centralizado, sobre fundo desfocado:
-     ```
-     split[a][b];[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:2[bg];[b]scale=1080:-2[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,fps=30,
-     ```
-   - **Vertical**:
-     ```
-     scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,
-     ```
-3. Renderize (mesmos cuidados da skill video-editor: `-t` em vez de `-to`, silêncio para vídeo mudo, `fontfile=` se faltar fonte):
+1. Gere os Shorts (por padrão os 3 momentos de maior nota; desempate pela viralidade):
    ```bash
-   ffmpeg -ss <start> -t <duração> -i <source> \
-     -vf "<início do passo 2>subtitles=projects/<slug>/subs/<id>.pt.srt:force_style='FontSize=13,Bold=1,Outline=3,MarginV=70,Alignment=2',\
-   drawtext=text='<author_handle>':x=(w-tw)/2:y=160:fontsize=48:fontcolor=white:borderw=3" \
-     -af "loudnorm=I=-14:TP=-1.5:LRA=11" -ar 48000 -ac 2 \
-     -c:v libx264 -preset medium -crf 20 -c:a aac -b:a 192k -movflags +faststart \
-     projects/<slug>/output/shorts/<NN>_<id>.mp4
+   py -3 -m gtakit shorts projects/<slug> --count 3
    ```
-   - Sem legenda: remova o trecho `subtitles=...,`.
-   - **Vídeo mudo**: insira `-f lavfi -i anullsrc=r=48000:cl=stereo -map 0:v -map 1:a -shortest` logo após `-i <source>` e remova o `-af`.
-   - A legenda fica no terço de baixo, mas acima da área dos botões do app (`MarginV=70`); o crédito fica no topo, abaixo da barra de busca (`y=160`).
-4. Gere `projects/<slug>/output/shorts/shorts.json`, um item por Short:
-   ```json
-   [{
-     "file": "01_m03.mp4",
-     "moment_id": "m03",
-     "title": "Ele capotou na rampa e não acreditou 😂 #GTA #Shorts",
-     "description": "Clipe original: <author> (<author_handle>) — <url>\n#GTA5 #GTARP #Shorts",
-     "duration_s": 24.0
-   }]
-   ```
-   - Título: **até 100 caracteres**, PT-BR, descreve só o que acontece no clipe, termina com `#Shorts`.
-   - Descrição: **sempre** o crédito com link do post original.
-5. Mostre os títulos ao usuário para aprovação. Upload continua manual (privado por padrão).
+   Cria `output/shorts/<NN>_<id>.mp4` e `output/shorts/shorts.json` (com a descrição já trazendo o crédito) e confere 1080x1920, áudio e ≤ 60 s.
+2. Escreva o `title` de cada Short no `shorts.json`: **até 100 caracteres**, PT-BR, descreve só o que acontece no clipe, termina com `#Shorts`.
+3. Mostre os títulos ao usuário para aprovação. Upload continua manual (privado por padrão).
+
+## Regras (implementadas em `gtakit/render.py`)
+- **Duração:** alvo 15–45 s; máximo **60 s**. Momento mais longo: janela de 60 s começando 4 s antes do `peak_time` (sem `peak_time`, os primeiros 60 s). Momento com menos de 8 s não vira Short.
+- **Horizontal:** vídeo inteiro na largura, centralizado sobre fundo desfocado. **Vertical:** ocupa a tela.
+- **Legenda** no terço de baixo, acima dos botões do app (`FontSize=13,Bold=1,Outline=3,MarginV=70`); **crédito** no topo (`y=160`).
+- **Vídeo mudo:** faixa de silêncio; mesmos cuidados de fonte e corte da video-editor.
+- `shorts.json`: `file`, `moment_id`, `title`, `description` (sempre com o crédito e o link do post original), `duration_s`.
 
 ## Verificações (obrigatórias)
-```bash
-ffprobe -v error -show_entries stream=codec_type,width,height -show_entries format=duration -of csv=p=0 <short>
-```
-- `1080,1920`, faixa de vídeo **e** de áudio, duração ≤ 60 s.
+- O comando já confere `1080x1920`, faixa de vídeo **e** de áudio e duração ≤ 60 s.
 - Extraia um quadro do meio e confira: legenda legível e não cortada nas laterais, crédito visível.
 - Direitos autorais: Shorts com `rights: unknown` têm o mesmo risco do compilado — liste-os no resumo.

@@ -15,62 +15,30 @@ Quarta etapa: **discovery → viral-moment-analyzer → video-translator → vid
 ## Pré-requisitos
 - `ffmpeg` com `libx264`, `libass` (legendas) e `drawtext` (`ffmpeg -filters | grep -E "subtitles|drawtext"`).
 
-## Ordem dos momentos
-- Abra com um dos 2 melhores (gancho nos primeiros 5 s), termine com o melhor de todos.
-- Alterne categorias; evite dois clipes do mesmo autor em sequência.
-
 ## Passos
-1. **Cortar e padronizar cada clipe** (1920x1080, 30 fps, mesmo codec — necessário para concatenar sem erros):
+1. Monte o compilado:
    ```bash
-   ffmpeg -ss <start> -t <duração> -i <source> \
-     -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=30,\
-   subtitles=projects/<slug>/subs/<id>.pt.srt:force_style='FontSize=22,Outline=2,MarginV=40',\
-   drawtext=text='<author_handle>':x=w-tw-30:y=30:fontsize=28:fontcolor=white:borderw=2" \
-     -af "loudnorm=I=-14:TP=-1.5:LRA=11" -ar 48000 -ac 2 \
-     -c:v libx264 -preset medium -crf 20 -c:a aac -b:a 192k \
-     projects/<slug>/clips/<NN>_<id>.mp4
+   py -3 -m gtakit render projects/<slug>            # --preset ultrafast para um rascunho rápido
    ```
-   - Sem legenda: remova o trecho `subtitles=...,`.
-   - **Vídeo sem áudio** (ver `has_audio` no `discovery.json`): o clipe sairia sem faixa de som e deixaria um buraco no áudio ao concatenar. Adicione silêncio — insira logo após `-i <source>`:
-     ```
-     -f lavfi -i anullsrc=r=48000:cl=stereo -map 0:v -map 1:a -shortest
-     ```
-     e remova o `-af "loudnorm=..."` (não há o que normalizar).
-   - `<duração>` = `end - start` (segundos). Use `-t`, não `-to`, antes do `-i`: `-to` como opção de entrada não funciona em versões antigas do ffmpeg.
-   - `-ss` antes de `-i` é rápido; como recodificamos, o corte fica preciso.
-   - Escape `:` e `'` no `author_handle` dentro do `drawtext`.
-   - Se aparecer `Cannot find a valid font` (comum no ffmpeg do Windows), indique a fonte no `drawtext`: `fontfile='C\:/Windows/Fonts/arial.ttf':` (Linux: `/usr/share/fonts/...`; macOS: `/System/Library/Fonts/Helvetica.ttc`).
-   - **Vídeo vertical (altura > largura, comum no X):** em vez de barras pretas, use fundo desfocado. Troque o início do `-vf` (até `fps=30,`) por:
-     ```
-     split[a][b];[a]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=20:2[bg];\
-     [b]scale=-2:1080[fg];[bg][fg]overlay=(W-w)/2:0,fps=30,
-     ```
-     (descubra a orientação com `ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 <source>`).
-2. **Lista de concatenação** `projects/<slug>/clips/list.txt`:
-   ```
-   file '01_abc123.mp4'
-   file '02_def456.mp4'
-   ```
-3. **Concatenar** (sem recodificar, pois todos os clipes têm o mesmo formato):
-   ```bash
-   ffmpeg -f concat -safe 0 -i projects/<slug>/clips/list.txt -c copy \
-     -movflags +faststart projects/<slug>/output/compilation.mp4
-   ```
-4. **Capítulos**: some as durações (`ffprobe -v error -show_entries format=duration -of csv=p=0 <clip>`) e salve `output/chapters.json`:
-   ```json
-   [{ "start": 0.0, "moment_ids": ["m03"], "title": "Capotou na rampa" }]
-   ```
-   - O YouTube exige capítulos de **no mínimo 10 s**: se um clipe tiver menos, junte-o ao capítulo seguinte (`moment_ids` com os dois) e use um título que cubra ambos.
-   - Se o **último** clipe tiver menos de 10 s (não há capítulo seguinte), junte-o ao capítulo **anterior**.
-   - O primeiro capítulo começa em `0.0`; se houver intro, ela é o primeiro capítulo.
-   - Grave também em cada momento do `moments.json` o **`clip_start`**: onde o clipe começa no compilado (soma das durações dos clipes anteriores, incluindo a intro). A thumbnail usa esse valor.
-5. Opcional: intro/outro do usuário — padronize-os com o mesmo comando do passo 1 (sem legenda/crédito) e coloque no início/fim de `list.txt`.
+   Ele corta e padroniza cada clipe na ordem abaixo, junta tudo em `output/compilation.mp4`, grava `output/timeline.json` (onde cada clipe começa: `clip_start`) e `output/chapters.json`, e confere resolução, áudio e duração.
+2. Dê um título curto a cada capítulo em `output/chapters.json` (`title`), descrevendo o que acontece.
+3. Opcional: intro/outro do usuário — padronize-os com o mesmo filtro dos clipes (sem legenda/crédito) e coloque no início/fim de `clips/list.txt`; depois rode só a concatenação (`ffmpeg -f concat -safe 0 -i clips/list.txt -c copy -movflags +faststart output/compilation.mp4` dentro da pasta do projeto) e atualize os `clip_start`.
+
+## Regras (implementadas em `gtakit/render.py` e `gtakit/timeline.py`)
+- **Ordem:** abre com o 2º melhor momento (gancho nos primeiros 5 s), fecha com o melhor; desempate pela viralidade. Evite dois clipes do mesmo autor em sequência (reordene em `moments.json` se precisar).
+- **Padronização** (necessária para juntar sem recodificar): 1920x1080, 30 fps, H.264 `-crf 20`, AAC 192 kbps 48 kHz estéreo, volume normalizado (`loudnorm=I=-14:TP=-1.5:LRA=11`).
+- **Vídeo horizontal:** escala + barras (`pad`). **Vertical:** fundo desfocado do próprio vídeo atrás.
+- **Legenda** (`subtitle_pt`): queimada com `FontSize=22,Outline=2,MarginV=40`. **Crédito:** `@autor` no canto superior direito.
+- **Vídeo mudo:** recebe faixa de silêncio (sem ela, a junção deixa um buraco no áudio) e não passa pelo `loudnorm`.
+- **Corte:** `-ss <start> -t <duração>` antes do `-i` (o `-to` antes do `-i` não funciona em ffmpeg antigo).
+- **Fonte:** se o ffmpeg disser `Cannot find a valid font` (comum no Windows), o gtakit tenta de novo com `C:/Windows/Fonts/arial.ttf` (Linux: DejaVu).
+- **Capítulos:** mínimo de **10 s** (regra do YouTube): clipe curto junta ao seguinte; o último curto junta ao anterior; o 1º começa em `0.0`.
 
 ## Verificações (obrigatórias antes de concluir)
 ```bash
 ffprobe -v error -show_entries stream=codec_name,width,height,r_frame_rate -show_entries format=duration \
   -of json projects/<slug>/output/compilation.mp4
 ```
-- Resolução 1920x1080, vídeo `h264`, áudio `aac`, duração ≈ soma dos clipes (diferença < 1 s).
+- O `render` já confere resolução 1920x1080, áudio presente e duração ≈ soma dos clipes (diferença < 1 s); se falhar, ele sai com erro e diz o motivo.
 - Extraia 3 quadros (início/meio/fim) com `ffmpeg -ss <t> -i ... -frames:v 1 frame.png` e confira legenda e crédito visíveis.
 - Se o concat falhar por formato divergente, refaça o passo 1 do clipe problemático — não troque para `-c copy` em clipes não padronizados.
