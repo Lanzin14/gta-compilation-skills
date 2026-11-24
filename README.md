@@ -39,4 +39,4 @@ Abra o repositório no Claude Code, cole os links dos posts do X com vídeos de 
 `python3 -m unittest discover -s tests -p "test_*.py"` (testes de unidade) e `python3 tests/e2e_test.py` (fluxo inteiro com vídeos sintéticos, sem rede do X e sem Whisper: confere vídeo, áudio, legendas, capítulos, créditos, thumbnail e Shorts). Roda automaticamente no GitHub Actions a cada PR, em Linux e Windows (no Windows também valida e executa `scripts/setup-windows.ps1`).
 
 ## Direitos autorais
-Sempre credite os criadores e, de preferência, peça permissão. Vídeos de terceiros podem gerar Content ID ou strike.
+Créditos e marca d'água **não** substituem autorização. O `gtakit` mantém um registro local de permissões (`data/permissions.json`, fora do Git), gera as mensagens de pedido (`gtakit permissions`) e **bloqueia** a marcação de "pronto para publicar" (`gtakit ready`) enquanto o dono de algum conteúdo usado não tiver autorizado — a menos que você aceite o risco explicitamente (`--accept-risk "motivo"`, que fica registrado). Vídeos de terceiros sem permissão podem gerar Content ID ou strike.

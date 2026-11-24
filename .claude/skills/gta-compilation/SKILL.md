@@ -41,7 +41,7 @@ python3 -m gtakit <comando> projects/<slug>    # Linux/macOS
 Siga cada skill na ordem acima. Pontos de **parada obrigatória** (espere o usuário aprovar):
 - **Após a etapa 1:** lista dos vídeos ordenados pela nota de viralidade, antes de baixar. Em seguida, entregue `permissions.md` com as mensagens de pedido de permissão para o usuário enviar.
 - **Após a etapa 2:** momentos escolhidos (vídeo, início–fim, motivo), antes de editar.
-- **Após a etapa 5:** título, texto e imagem da thumbnail, descrição e alertas de direitos autorais, antes de qualquer publicação.
+- **Após a etapa 5:** título, texto e imagem da thumbnail, descrição e o resultado do `gtakit ready` (quem ainda não autorizou), antes de qualquer publicação. Créditos não substituem autorização; aceitar o risco é decisão **explícita** do usuário (`--accept-risk`).
 
 As etapas 3 e 4 rodam sem parada, mas mostre uma amostra das legendas traduzidas.
 
@@ -54,4 +54,4 @@ As etapas 3 e 4 rodam sem parada, mas mostre uma amostra das legendas traduzidas
 - Quantos momentos, quantos legendados e de quais idiomas.
 - Vídeos descartados ou com falha, e por quê.
 - Shorts gerados: quantos, caminho de cada um em `output/shorts/` e o título proposto (de `shorts.json`).
-- Lista de autores com `rights: unknown` (risco de Content ID/strike).
+- Resultado do `gtakit ready`: pronto ou bloqueado, e quem ainda não autorizou (risco de Content ID/strike).

@@ -27,12 +27,13 @@ description: Prepara título, descrição, tags, capítulos, créditos e demais 
 
    🎮 Créditos (assista os originais!)
    <author> (<author_handle>) — <url do post original>
+   <criador original> — clipe de <author_handle> — <url>   (quando houver original_creator)
    ...
 
    #GTA5 #GTARP #<tema>
    ```
    - Capítulos: o primeiro **tem que** ser `00:00`, mínimo 3 capítulos, cada um com ≥ 10 s (regra do YouTube).
-   - Todos os autores usados em `moments.json` devem aparecer nos créditos.
+   - Todos os autores usados em `moments.json` devem aparecer nos créditos, e o criador original quando houver.
 3. **Tags**: 10–15 tags, total < 500 caracteres, mistura PT/EN (`gta 5`, `gta rp`, `gta funny moments`, `fails gta`...).
 4. **Thumbnail** (gerada automaticamente):
    1. O quadro é escolhido pelo `gtakit`: momento de maior nota que tenha `peak_time`, em `tempo_no_compilado = clip_start + (peak_time − start)` (`clip_start` vem do `output/timeline.json`). Sem nenhum `peak_time`, usa o meio do último clipe e avisa.
@@ -44,7 +45,15 @@ description: Prepara título, descrição, tags, capítulos, créditos e demais 
       - O texto vai por `textfile=` (acentos, `:` e `'` funcionam sem escapar); faixa escura na metade de baixo + texto amarelo com borda preta, legível no celular.
       - O comando confere **1280x720** e **menos de 2 MB** (limite do YouTube) e diz em que segundo pegou o quadro.
    4. Abra a imagem: se o quadro for um corte de cena borrado ou o texto sair cortado, avise e ajuste (texto mais curto).
-5. Salve `metadata.json` e mostre tudo ao usuário para revisão.
+5. **Confira os direitos** (obrigatório antes de dizer que está pronto):
+   ```bash
+   py -3 -m gtakit ready projects/<slug>
+   ```
+   - Saída 0 = pronto; saída 3 = **bloqueado**: lista quem ainda não autorizou. Mostre essa lista ao usuário.
+   - Créditos e marca d'água **não** liberam a publicação.
+   - Só se o **usuário disser explicitamente** que quer publicar mesmo assim, rode `ready ... --accept-risk "<motivo nas palavras dele>"`. Nunca decida isso sozinho.
+   - Grava `output/publish_check.json`; copie `publish_ready` e as pendências para o `metadata.json`.
+6. Salve `metadata.json` e mostre tudo ao usuário para revisão.
 
 ## Saída: `projects/<slug>/output/metadata.json`
 ```json
@@ -59,14 +68,16 @@ description: Prepara título, descrição, tags, capítulos, créditos e demais 
   "contains_synthetic_media": false,
   "video_file": "compilation.mp4",
   "thumbnail_file": "thumbnail.jpg",
-  "credits": [{ "author": "...", "author_handle": "@...", "url": "..." }],
-  "rights_summary": { "permission_granted": 3, "unknown": 2 }
+  "credits": [{ "author": "...", "author_handle": "@...", "original_creator": "alanzoka", "url": "..." }],
+  "rights_summary": { "permission_granted": 3, "unknown": 2 },
+  "publish_ready": false
 }
 ```
 - `category_id` 20 = Gaming. `privacy_status` padrão `private` (o usuário publica depois de revisar).
 
 ## Checklist de direitos (mostrar sempre)
-- Liste os vídeos com `rights: unknown` e alerte sobre risco de Content ID/strike.
+- Liste os vídeos sem permissão (saída do `gtakit ready`) e alerte sobre risco de Content ID/strike.
+- `publish_ready` só é `true` com todas as permissões registradas ou com o risco aceito explicitamente pelo usuário (fica registrado no `publish_check.json`).
 - Recomende transformação (comentário, edição, legendas) e créditos visíveis — reduz o risco, mas **não** garante uso justo.
 
 ## Upload
