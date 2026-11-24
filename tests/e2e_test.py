@@ -199,6 +199,10 @@ def run_pipeline(root):
     check(chap and chap[0]["start"] == 0 and len(chap) >= 3 and all(c["dur"] >= 10 for c in chap),
           f"capítulos válidos para o YouTube ({len(chap)}, todos ≥ 10 s, 1º em 00:00)")
     best_id = max((x for x in moments if x["selected"]), key=lambda x: (x["score"], by[x["video_id"]]["viral_score"]))["id"]
+    vid_of = {x["id"]: x["video_id"] for x in moments}
+    seq = [by[vid_of[c["moment_id"]]]["author_handle"] for c in clips]
+    check(all(x != y for x, y in zip(seq, seq[1:])) and tl.get("order_notes"),
+          "ordem otimizada: nenhum criador em sequência e explicação no timeline.json")
     check([c["moment_id"] for c in clips][-1] == best_id, "compilado fecha com o melhor momento (maior nota final)")
     check("clip_start" not in json.dumps(json.loads((P / "moments.json").read_text(encoding="utf-8"))),
           "render não escreve no moments.json (clip_start fica no timeline.json)")
