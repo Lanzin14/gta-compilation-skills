@@ -11,7 +11,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from gtakit import analysis, render, rights, timeline, viral  # noqa: E402
+from gtakit import analysis, render, rights, thumbs, timeline, viral  # noqa: E402
 from gtakit.__main__ import _from_ytdlp  # noqa: E402
 from gtakit.project import Project, check_items, save_json  # noqa: E402
 
@@ -166,6 +166,34 @@ class SmartOrder(unittest.TestCase):
         vids = [{"id": "v", "author_handle": "@a", "viral_score": 1}]
         ms = [{"id": "m1", "video_id": "v", "score": 90, "start": 0, "end": 10, "selected": False}]
         self.assertEqual(timeline.smart_order(ms, vids)[0], [])
+
+
+class Thumbnails(unittest.TestCase):
+    def test_rejects_dark_blurry_and_repeated_frames_and_keeps_sharpest(self):
+        stats = {1.0: (20.0, 3.0, 0b1111, 1.0), 1.5: (120.0, 20.0, 0b1111, 1.0), 2.0: (120.0, 4.0, 0xF0F0F0F0F0F0F0F0, 1.0),
+                 2.5: (120.0, 2.0, 0xF0F0F0F0F0F0F0F1, 1.0), 5.0: (110.0, 3.0, 0xF0F0F0F0F0F0F0F0, 1.0),
+                 9.0: (100.0, 5.0, 0x0F0F, 1.0), 12.0: (130.0, 1.0, 0x3333, 9.3)}
+        chosen, rejected = thumbs.choose([("m1", [1.0, 1.5, 2.0, 2.5]), ("m2", [5.0]), ("m3", [9.0]), ("m4", [12.0])],
+                                         lambda t: stats[t], 4)
+        self.assertEqual([(c["moment_id"], c["t"]) for c in chosen], [("m1", 2.5), ("m3", 9.0)])
+        reasons = " ".join(r for _, _, r in rejected)
+        self.assertIn("escuro", reasons)
+        self.assertIn("borrado", reasons)
+        self.assertIn("quase igual", reasons)
+        self.assertIn("transição", reasons)  # o caso real: imagem dupla numa troca de cena (nitidez 'boa', mudança 9,3)
+
+    def test_candidate_times_stay_inside_the_clip(self):
+        tl = {"clips": [{"moment_id": "a", "clip_start": 10.0, "clip_dur": 5.0}, {"moment_id": "b", "clip_start": 15.0, "clip_dur": 20.0}]}
+        ms = [{"id": "a", "score": 90, "start": 0.0, "peak_time": 4.9}, {"id": "b", "score": 80, "start": 2.0, "peak_time": None},
+              {"id": "z", "score": 99, "start": 0.0, "peak_time": 1.0}]
+        c = dict(thumbs.candidate_times(ms, tl, 2))
+        self.assertEqual(list(c), ["a", "b"])  # z não está no compilado
+        self.assertTrue(all(10.3 <= t <= 14.7 for t in c["a"]))
+        self.assertEqual(c["b"][0], 25.0)  # sem peak_time: meio do clipe
+
+    def test_unknown_layout_is_an_error(self):
+        with self.assertRaises(ValueError):
+            thumbs.layout_filter("diagonal", "t.txt")
 
 
 class Render(unittest.TestCase):

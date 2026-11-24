@@ -160,3 +160,32 @@ def loudnorm_measure(path, start, duration, cwd=None):
         return json.loads(block)
     except ValueError:
         return None
+
+
+def frame_probe(video, t, cwd=None):
+    """Um quadro em t: (brilho médio 0–255, índice de borrão, dHash de 64 bits)."""
+    r = subprocess.run(["ffmpeg", "-v", "info", "-hide_banner", "-nostats", "-ss", f"{t:.2f}", "-i", str(video),
+                        "-frames:v", "1", "-an", "-vf",
+                        "signalstats,blurdetect,metadata=print,scale=9:8:flags=area,format=gray",
+                        "-f", "rawvideo", "-"], capture_output=True, cwd=cwd)
+    err = r.stderr.decode("utf-8", "replace")
+    if r.returncode or len(r.stdout) < 72:
+        raise FFmpegError(f"quadro em {t:.2f}s de {video}: {err.strip()[-300:]}")
+    y = re.findall(r"lavfi\.signalstats\.YAVG=([\d.]+)", err)
+    b = re.findall(r"lavfi\.blur=([\d.]+)", err)
+    px = r.stdout[:72]
+    bits = 0
+    for row in range(8):
+        for col in range(8):
+            bits = (bits << 1) | (px[row * 9 + col] > px[row * 9 + col + 1])
+    return float(y[0]) if y else 0.0, float(b[0]) if b else 0.0, bits
+
+
+def scene_change_near(video, t, window=0.5, cwd=None):
+    """Maior mudança de cena (scdet, 0–100) entre t−window e t+window. Alto = corte/transição por perto."""
+    rc, out = run(["ffmpeg", "-hide_banner", "-nostats", "-ss", f"{max(0.0, t - window):.2f}", "-t", f"{2 * window:.2f}",
+                   "-i", video, "-an", "-vf", "scdet=threshold=100,metadata=print", "-f", "null", "-"], cwd)
+    if rc:
+        raise FFmpegError(f"mudança de cena em {t:.2f}s de {video}: {out.strip()[-300:]}")
+    vals = [float(x) for x in re.findall(r"lavfi\.scd\.score=([\d.]+)", out)]
+    return max(vals) if vals else 0.0

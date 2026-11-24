@@ -14,6 +14,8 @@ Comandos (na ordem do fluxo):
   rank       refaz só o ranking (sem medir de novo), após transcrições ou avaliações em judgments.json
   render     corta, padroniza e junta os clipes; gera output/compilation.mp4 e output/timeline.json
   thumbnail  gera output/thumbnail.jpg no pico do melhor momento
+  thumbnails gera 3–5 candidatas (2 estilos) + folha de comparação output/thumbs/escolha.jpg
+  thumbnail-pick  copia a candidata escolhida para output/thumbnail.jpg
   shorts     gera os Shorts verticais em output/shorts/
   credit     define o criador original de um vídeo (ex.: o streamer do clipe)
   permissions  gera permissions.md com as mensagens de pedido de permissão
@@ -31,7 +33,7 @@ import time
 
 import shutil
 
-from . import analysis, brand as brandmod, ff, ranking, render, rights, timeline, viral
+from . import analysis, brand as brandmod, ff, ranking, render, rights, thumbs, timeline, viral
 from .project import Project, load_json, save_json
 
 
@@ -397,6 +399,64 @@ def cmd_thumbnail(proj, a):
     return 0
 
 
+def cmd_thumbnails(proj, a):
+    mom = load_json(proj.p("moments.json"))
+    tl = load_json(proj.p("output", "timeline.json"))
+    if tl is None:
+        return _err("rode o render antes (falta output/timeline.json)")
+    brand = brandmod.load_brand(proj.dir)
+    accent = brandmod.ff_color(brand["colors"]["accent"]) if brand["active"] else "yellow"
+    out_dir = proj.p("output", "thumbs")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for old in out_dir.glob("*.jpg"):
+        old.unlink()
+    proj.p("output", "thumb_text.txt").write_text("\n".join(a.line), encoding="utf-8")
+    cands = thumbs.candidate_times(mom["moments"], tl, a.count)
+    probe = lambda t: ff.frame_probe("output/compilation.mp4", t, cwd=proj.dir) + (
+        ff.scene_change_near("output/compilation.mp4", t, cwd=proj.dir),)
+    chosen, rejected = thumbs.choose(cands, probe, a.count)
+    for mid, t, why in rejected:
+        print(f"  descartado {mid} em {t:.2f}s: {why}")
+    if not chosen:
+        return _err("nenhum quadro passou no filtro de qualidade (todos escuros, borrados ou repetidos)")
+    files, items = [], []
+    for i, c in enumerate(chosen, 1):
+        for style in ("faixa", "topo"):
+            name = f"output/thumbs/{len(files) + 1:02d}_{c['moment_id']}_{style}.jpg"
+            vf = thumbs.layout_filter(style, "output/thumb_text.txt", accent, brandmod.font_opt(brand))
+            rc, o = ff.run_drawtext(["ffmpeg", "-v", "error", "-y", "-ss", f"{c['t']:.2f}", "-i", "output/compilation.mp4",
+                                     "-frames:v", "1", "-vf", vf, "-q:v", "2", name], cwd=proj.dir)
+            if rc:
+                return _err(f"candidata {name}: {o.strip()[-300:]}")
+            size = proj.p(name).stat().st_size
+            info = ff.media_info(name, cwd=proj.dir)
+            if (info["width"], info["height"]) != (1280, 720) or size >= 2 * 1024 * 1024:
+                return _err(f"{name} fora do padrão do YouTube (1280x720, < 2 MB)")
+            files.append(name)
+            items.append({"n": len(files), "file": name, "moment_id": c["moment_id"], "t": c["t"], "style": style,
+                          "yavg": c["yavg"], "blur": c["blur"], "kb": size // 1024})
+            print(f"{len(files)}: {name} (quadro {c['t']}s, brilho {c['yavg']}, borrão {c['blur']}, {size // 1024} KB)")
+    rc, o = ff.run_drawtext(thumbs.sheet_args(files, "output/thumbs/escolha.jpg"), cwd=proj.dir)  # números = drawtext
+    if rc:
+        return _err(f"folha de comparação: {o.strip()[-300:]}")
+    save_json(proj.p("output", "thumbs", "candidatas.json"), items)
+    print(f"folha de comparação: output/thumbs/escolha.jpg — escolha com: gtakit thumbnail-pick {proj.dir} <número>")
+    return 0
+
+
+def cmd_thumbnail_pick(proj, a):
+    items = load_json(proj.p("output", "thumbs", "candidatas.json"))
+    if not items:
+        return _err("rode o comando thumbnails antes")
+    item = next((x for x in items if x["n"] == a.n), None)
+    if item is None:
+        return _err(f"candidata {a.n} não existe (1 a {len(items)})")
+    shutil.copyfile(proj.p(item["file"]), proj.p("output", "thumbnail.jpg"))
+    save_json(proj.p("output", "thumbnail_choice.json"), item)
+    print(f"output/thumbnail.jpg = candidata {a.n} ({item['style']}, momento {item['moment_id']})")
+    return 0
+
+
 def cmd_shorts(proj, a):
     disc = _videos(proj)
     by = {v["id"]: v for v in disc["videos"]}
@@ -576,6 +636,10 @@ def main(argv=None):
     s.add_argument("--order", default="smart", choices=["smart", "legacy"],
                    help="smart: gancho no início, melhor no fim, sem criador repetido em sequência")
     add("thumbnail", cmd_thumbnail).add_argument("--line", action="append", required=True, help="uma linha do texto (repita para 2 linhas)")
+    s = add("thumbnails", cmd_thumbnails)
+    s.add_argument("--line", action="append", required=True, help="uma linha do texto (repita para 2 linhas)")
+    s.add_argument("--count", type=int, default=4, help="quantos momentos diferentes (3–5)")
+    add("thumbnail-pick", cmd_thumbnail_pick).add_argument("n", type=int)
     s = add("shorts", cmd_shorts)
     s.add_argument("--count", type=int, default=3)
     s.add_argument("--preset", default="medium")
