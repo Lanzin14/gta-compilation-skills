@@ -190,3 +190,13 @@ def motion_frames(path, start, duration, fps=4, w=32, h=18, cwd=None):
         raise FFmpegError(f"quadros de movimento de {path}: {r.stderr.decode('utf-8', 'replace')[-300:]}")
     n = w * h
     return [r.stdout[i:i + n] for i in range(0, len(r.stdout) - n + 1, n)]
+
+
+def scene_change_near(video, t, window=0.5, cwd=None):
+    """Maior mudança de cena (scdet, 0–100) entre t−window e t+window. Alto = corte/transição por perto."""
+    rc, out = run(["ffmpeg", "-hide_banner", "-nostats", "-ss", f"{max(0.0, t - window):.2f}", "-t", f"{2 * window:.2f}",
+                   "-i", video, "-an", "-vf", "scdet=threshold=100,metadata=print", "-f", "null", "-"], cwd)
+    if rc:
+        raise FFmpegError(f"mudança de cena em {t:.2f}s de {video}: {out.strip()[-300:]}")
+    vals = [float(x) for x in re.findall(r"lavfi\.scd\.score=([\d.]+)", out)]
+    return max(vals) if vals else 0.0

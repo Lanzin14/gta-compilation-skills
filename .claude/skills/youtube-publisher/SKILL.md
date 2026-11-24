@@ -43,7 +43,7 @@ description: Prepara título, descrição, tags, capítulos, créditos e demais 
       py -3 -m gtakit thumbnails projects/<slug> --line "CAPOTOU" --line "NA RAMPA!" --count 4
       py -3 -m gtakit thumbnail-pick projects/<slug> <número escolhido>
       ```
-      - Para cada um dos melhores momentos, testa o quadro do pico e ±0,5 s/+1 s e fica com o mais nítido; descarta quadros **escuros** (brilho < 40), **borrados** e **quase iguais** a outra candidata (o comando lista o que descartou e por quê).
+      - Para cada um dos melhores momentos, testa o quadro do pico e ±0,5 s/+1 s e fica com o mais nítido; descarta quadros **escuros** (brilho < 40), **borrados**, **perto de um corte/transição de cena** (imagem dupla; mudança ≥ 6 em ±0,5 s) e **quase iguais** a outra candidata (o comando lista o que descartou e por quê).
       - Folha de comparação: `output/thumbs/escolha.jpg`; detalhes em `output/thumbs/candidatas.json`. Com a marca ativa, o estilo "topo" usa a cor da marca.
    4. Opção rápida (uma só imagem, no pico do melhor momento), com o texto escolhido (uma `--line` por linha):
       ```bash
