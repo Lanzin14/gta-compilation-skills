@@ -39,6 +39,7 @@ Primeira etapa do fluxo: **discovery → viral-moment-analyzer → video-transla
    - Lê o `raw_meta.jsonl` e usa os campos do `yt-dlp`: `id` (no X é o id da **mídia**, diferente do número do post — num post com vários vídeos, cada um tem seu id), `webpage_url`, `uploader`, `uploader_id` (@), `timestamp`, `duration`, `width`, `height`, `like_count`, `repost_count`, `comment_count`, `view_count` (pode vir `null`).
    - `post_id` sai da URL (número depois de `/status/`).
    - Rodar de novo **preserva** aprovações, `rights` e categorias já gravadas.
+   - Post já usado num compilado anterior (histórico em `data/history.jsonl`) aparece com aviso e `used_before`; mostre ao usuário antes de aprovar.
 4. Descarte:
    - vídeos que não sejam gameplay de GTA (confirme pelo texto do post em `description`/`title`; na dúvida, pergunte ao usuário);
    - resolução < 480p ou duração > 10 min;

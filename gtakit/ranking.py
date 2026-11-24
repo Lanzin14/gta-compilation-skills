@@ -479,6 +479,8 @@ def rank(videos, meas_by_video, transcripts, judgments, cfg):
                 if name != "humor" and j and j.get("reason"):
                     crit[name] = _clamp(float(j["score"]))
                     why.append(f"{name} ajustado na avaliação: {j['reason']}")
+            if v.get("used_before"):
+                alerts.append(f"já usado em compilado anterior: {', '.join(v['used_before'])}")
             final = sum(w[k] * crit[k] for k in CRITERIA) / sum(w.values())
             p_in = [t for t, k in ev if k == "audio_peak"]
             s_in = [t for t, k in ev if k == "scene_change"]

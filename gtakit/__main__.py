@@ -22,6 +22,10 @@ Comandos (na ordem do fluxo):
   permissions  gera permissions.md com as mensagens de pedido de permissão
   rights-set / rights-list / rights-sync   registro de permissões (data/permissions.json)
   ready      confere se o compilado pode ser publicado (direitos) — bloqueia sem permissão
+  history-record  grava/atualiza o compilado no histórico (data/history.jsonl) — o render já faz isso
+  published  registra o link do YouTube depois que o usuário publicou (manualmente)
+  metrics-import  importa o CSV exportado do YouTube Studio para o histórico
+  report     desempenho por compilado e por criador
   validate   confere os contratos JSON entre as etapas
   status     mostra o estado das etapas
 """
@@ -34,7 +38,9 @@ import time
 
 import shutil
 
-from . import analysis, brand as brandmod, ff, framing, ranking, render, rights, thumbs, timeline, viral
+from .project import now_iso as now_iso_str
+
+from . import analysis, brand as brandmod, ff, framing, history, ranking, render, rights, thumbs, timeline, viral
 from .project import Project, load_json, save_json
 
 
@@ -91,6 +97,41 @@ def _encode_moment(proj, m, v, out, vf_fn, brand, preset, start=None, dur=None, 
         af = render.audio_filter(meas, dur, fade)
     return ff.run_drawtext(render.encode_args(m["source"], start, dur, v["has_audio"], vf, out,
                                               preset=preset, faststart=faststart, af=af), cwd=proj.dir)
+
+
+def _history_entry(proj, render_s=None):
+    disc = _videos(proj)
+    by = {v["id"]: v for v in disc["videos"]}
+    mom = {m["id"]: m for m in load_json(proj.p("moments.json"), {"moments": []})["moments"]}
+    tl = load_json(proj.p("output", "timeline.json"), {"clips": []})
+    clips = []
+    for e in tl["clips"]:
+        m = mom.get(e["moment_id"])
+        if not m:
+            continue  # abertura/tela final
+        v = by[m["video_id"]]
+        clips.append({"moment_id": m["id"], "video_id": v["id"], "post_id": v.get("post_id"), "url": v.get("url"),
+                      "author_handle": v.get("author_handle"),
+                      "original_creator": (v.get("original_creator") or {}).get("name"),
+                      "start": m["start"], "end": m["end"], "score": m["score"]})
+    pc = load_json(proj.p("output", "publish_check.json"), {})
+    entry = {"slug": proj.dir.name, "theme": disc.get("theme"), "recorded_at": now_iso_str(),
+             "duration_s": round(sum(e["clip_dur"] for e in tl["clips"]), 2), "clips": clips,
+             "shorts": len(load_json(proj.p("output", "shorts", "shorts.json"), [])),
+             "publish_ready": pc.get("publish_ready"), "youtube": None, "metrics": None}
+    if render_s is not None:
+        entry["render_s"] = round(render_s, 1)
+    return entry
+
+
+def _record(proj, path, render_s=None):
+    entries = history.load(path)
+    entry = _history_entry(proj, render_s)
+    old = next((e for e in entries if e["slug"] == entry["slug"]), {})
+    if render_s is None and old.get("render_s") is not None:
+        entry["render_s"] = old["render_s"]
+    history.save(history.upsert(entries, entry), path)
+    return entry
 
 
 def _used_videos(proj):
@@ -153,6 +194,11 @@ def cmd_discovery(proj, a):
                            ("local_path", None), ("has_audio", None), ("error", None)):
             v[k] = prev.get(k, default)
     vids.sort(key=lambda v: -v["viral_score"])
+    past = history.load(a.history)
+    for v in vids:
+        v["used_before"] = history.used_before(past, v, exclude_slug=proj.dir.name)
+        if v["used_before"]:
+            print(f"aviso: {v['author_handle']} ({v['url']}) já foi usado em: {', '.join(v['used_before'])}")
     disc = load_json(proj.p("discovery.json"), {}) or {}
     disc.update({"theme": disc.get("theme") or proj.state().get("theme"), "videos": vids})
     save_json(proj.p("discovery.json"), disc)
@@ -303,6 +349,15 @@ def cmd_audio(proj, a):
 
 
 def cmd_render(proj, a):
+    t0 = time.time()
+    rc = _render(proj, a)
+    if rc == 0:
+        e = _record(proj, a.history, time.time() - t0)
+        print(f"histórico: {e['slug']} gravado em {a.history} ({len(e['clips'])} clipes, render {e['render_s']}s)")
+    return rc
+
+
+def _render(proj, a):
     disc = _videos(proj)
     by = {v["id"]: v for v in disc["videos"]}
     mom = load_json(proj.p("moments.json"))
@@ -624,6 +679,47 @@ def cmd_facecam(proj, a):
     return 0
 
 
+def cmd_history_record(proj, a):
+    e = _record(proj, a.history)
+    print(f"histórico: {e['slug']} ({len(e['clips'])} clipes, {e['duration_s']}s) em {a.history}")
+    return 0
+
+
+def cmd_published(proj, a):
+    yid = history.youtube_id(a.url)
+    if not yid:
+        return _err("link do YouTube inválido (use o link do vídeo ou do Short)")
+    entries = history.load(a.history)
+    if not any(e["slug"] == proj.dir.name for e in entries):
+        entries = history.upsert(entries, _history_entry(proj))
+    for e in entries:
+        if e["slug"] == proj.dir.name:
+            e["youtube"] = {"video_id": yid, "url": a.url, "title": a.title, "published_at": a.at or now_iso_str()}
+    history.save(entries, a.history)
+    proj.mark("publish", "published", youtube=yid)
+    print(f"{proj.dir.name}: publicado em {a.url}")
+    return 0
+
+
+def cmd_metrics_import(a):
+    try:
+        rows = history.parse_studio_csv(a.csv)
+    except (OSError, ValueError) as exc:
+        return _err(f"CSV do YouTube Studio: {exc}")
+    entries = history.load(a.history)
+    unmatched = history.apply_metrics(entries, rows, now_iso_str())
+    history.save(entries, a.history)
+    print(f"{len(rows) - len(unmatched)} vídeo(s) associados a compilados do histórico")
+    for u in unmatched:
+        print(f"  não associado (publique com `gtakit published` para ligar o link): {u}")
+    return 0
+
+
+def cmd_report(a):
+    print(history.report(history.load(a.history)))
+    return 0
+
+
 def cmd_validate(proj, a):
     errors = proj.validate()
     for e in errors:
@@ -654,7 +750,9 @@ def main(argv=None):
         return sp
 
     add("init", cmd_init).add_argument("--theme", default=None)
-    add("discovery", cmd_discovery).add_argument("--now", type=float, default=None, help="(testes) horário atual em epoch")
+    s = add("discovery", cmd_discovery)
+    s.add_argument("--now", type=float, default=None, help="(testes) horário atual em epoch")
+    s.add_argument("--history", default=history.DEFAULT_HISTORY)
     s = add("approve", cmd_approve)
     s.add_argument("ids", nargs="*")
     s.add_argument("--all", action="store_true")
@@ -668,6 +766,7 @@ def main(argv=None):
     add("audio", cmd_audio).add_argument("--full", action="store_true")
     s = add("render", cmd_render)
     s.add_argument("--preset", default="medium")
+    s.add_argument("--history", default=history.DEFAULT_HISTORY)
     s.add_argument("--order", default="smart", choices=["smart", "legacy"],
                    help="smart: gancho no início, melhor no fim, sem criador repetido em sequência")
     add("thumbnail", cmd_thumbnail).add_argument("--line", action="append", required=True, help="uma linha do texto (repita para 2 linhas)")
@@ -711,6 +810,19 @@ def main(argv=None):
     s.add_argument("video_id")
     s.add_argument("--box", help="x,y,largura,altura em frações da imagem (0 a 1)")
     s.add_argument("--clear", action="store_true")
+    add("history-record", cmd_history_record).add_argument("--history", default=history.DEFAULT_HISTORY)
+    s = add("published", cmd_published)
+    s.add_argument("--url", required=True, help="link do vídeo publicado no YouTube")
+    s.add_argument("--title", default=None)
+    s.add_argument("--at", default=None, help="data/hora da publicação (padrão: agora)")
+    s.add_argument("--history", default=history.DEFAULT_HISTORY)
+    s = sub.add_parser("metrics-import")
+    s.add_argument("csv", help="CSV exportado do YouTube Studio (Análises > Modo avançado > Exportar)")
+    s.add_argument("--history", default=history.DEFAULT_HISTORY)
+    s.set_defaults(fn=cmd_metrics_import, project=None)
+    s = sub.add_parser("report")
+    s.add_argument("--history", default=history.DEFAULT_HISTORY)
+    s.set_defaults(fn=cmd_report, project=None)
     add("validate", cmd_validate)
     add("status", cmd_status)
     a = ap.parse_args(argv)
