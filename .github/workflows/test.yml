@@ -8,18 +8,47 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.15"]   # 3.15 = versão usada no Windows do usuário
+    name: e2e (Python ${{ matrix.python }})
     steps:
       - uses: actions/checkout@v5
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+          allow-prereleases: true
+
+      # Os pacotes .deb ficam no cache do GitHub: com o cache, o espelho do apt (que já travou por 20 min) quase não é usado.
+      - uses: actions/cache@v4
+        with:
+          path: ~/apt-cache
+          key: apt-ffmpeg-ubuntu-24.04-v1
+
       - name: Instalar ffmpeg e fontes
+        timeout-minutes: 25
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
+          mkdir -p "$HOME/apt-cache/partial"
+          OPTS="-o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Dir::Cache::Archives=$HOME/apt-cache"
+          sudo apt-get $OPTS update
+          if ! sudo timeout 600 apt-get $OPTS install -y --no-install-recommends ffmpeg fonts-dejavu-core; then
+            echo "::warning::espelho do apt lento/fora do ar; tentando archive.ubuntu.com"
+            sudo sed -i -E 's#http://[^ ]*ubuntu\.com/ubuntu#http://archive.ubuntu.com/ubuntu#g' /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list 2>/dev/null || true
+            sudo apt-get $OPTS update
+            sudo timeout 600 apt-get $OPTS install -y --no-install-recommends ffmpeg fonts-dejavu-core
+          fi
+          sudo chown -R "$USER" "$HOME/apt-cache"
+          ffmpeg -version | head -1
           ffmpeg -version | head -1
 
+      - name: Testes de unidade (gtakit)
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
       - name: Teste ponta a ponta (vídeos sintéticos)
-        run: python3 tests/e2e_test.py
+        run: python tests/e2e_test.py
 
   windows:
     runs-on: windows-2025
@@ -64,8 +93,17 @@ jobs:
       - name: Garantir ffmpeg para o teste
         shell: pwsh
         run: |
+          # O setup-windows.ps1 acima instala o ffmpeg pelo winget, mas o PATH novo só vale em outro terminal:
+          # relê o PATH do registro e passa a pasta do ffmpeg para os próximos passos. Chocolatey só como reserva.
+          $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
           if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { choco install ffmpeg -y --no-progress }
+          $ff = Get-Command ffmpeg -ErrorAction Stop
+          Split-Path $ff.Source | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
           ffmpeg -version | Select-Object -First 1
+
+      - name: Testes de unidade no Windows
+        shell: pwsh
+        run: python -m unittest discover -s tests -p "test_*.py" -v
 
       - name: Teste ponta a ponta no Windows
         shell: pwsh

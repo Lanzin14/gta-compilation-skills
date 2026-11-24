@@ -35,20 +35,15 @@ description: Prepara título, descrição, tags, capítulos, créditos e demais 
    - Todos os autores usados em `moments.json` devem aparecer nos créditos.
 3. **Tags**: 10–15 tags, total < 500 caracteres, mistura PT/EN (`gta 5`, `gta rp`, `gta funny moments`, `fails gta`...).
 4. **Thumbnail** (gerada automaticamente):
-   1. Escolha o quadro do momento de maior nota que tenha `peak_time`: `tempo_no_compilado = clip_start + (peak_time − start)` (campos do `moments.json`). Se nenhum momento tiver `peak_time`, use o meio do clipe (`clip_start + duração/2`) e avise o usuário. Abra o quadro e, se for um corte de cena borrado, tente 0,5 s depois.
+   1. O quadro é escolhido pelo `gtakit`: momento de maior nota que tenha `peak_time`, em `tempo_no_compilado = clip_start + (peak_time − start)` (`clip_start` vem do `output/timeline.json`). Sem nenhum `peak_time`, usa o meio do último clipe e avisa.
    2. Proponha 3 textos curtos e deixe o usuário escolher: **2–4 palavras, MAIÚSCULAS, no máx. 2 linhas de até 14 caracteres** (ex.: `CAPOTOU` / `NA RAMPA!`). O texto tem que descrever algo que acontece no vídeo.
-   3. Grave o texto em `projects/<slug>/output/thumb_text.txt` (uma linha por linha da imagem, **sem quebra de linha no final**). Usar `textfile=` evita ter que escapar acentos, `:` e `'`.
-   4. Gere a imagem:
+   3. Gere a imagem com o texto escolhido (uma `--line` por linha):
       ```bash
-      ffmpeg -ss <tempo_no_compilado> -i projects/<slug>/output/compilation.mp4 -frames:v 1 \
-        -vf "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,eq=saturation=1.3:contrast=1.1,\
-      drawbox=y=ih*0.55:w=iw:h=ih*0.45:color=black@0.45:t=fill,\
-      drawtext=textfile=projects/<slug>/output/thumb_text.txt:fontsize=120:fontcolor=yellow:borderw=8:bordercolor=black:line_spacing=10:x=50:y=h-th-50" \
-        -q:v 2 projects/<slug>/output/thumbnail.jpg
+      py -3 -m gtakit thumbnail projects/<slug> --line "CAPOTOU" --line "NA RAMPA!"
       ```
-      - Faixa escura na metade de baixo + texto amarelo com borda preta: legível em qualquer cena e no celular.
-      - `Cannot find a valid font`: adicione `fontfile=` no `drawtext`, como explicado na skill video-editor.
-   5. Verifique: 1280x720 (`ffprobe -v error -show_entries stream=width,height -of csv=p=0 <arquivo>`) e **menos de 2 MB** (limite do YouTube). Abra a imagem e confira se o texto não saiu cortado; se sair, reduza o `fontsize`.
+      - O texto vai por `textfile=` (acentos, `:` e `'` funcionam sem escapar); faixa escura na metade de baixo + texto amarelo com borda preta, legível no celular.
+      - O comando confere **1280x720** e **menos de 2 MB** (limite do YouTube) e diz em que segundo pegou o quadro.
+   4. Abra a imagem: se o quadro for um corte de cena borrado ou o texto sair cortado, avise e ajuste (texto mais curto).
 5. Salve `metadata.json` e mostre tudo ao usuário para revisão.
 
 ## Saída: `projects/<slug>/output/metadata.json`
