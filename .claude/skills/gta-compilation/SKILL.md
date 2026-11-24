@@ -54,4 +54,5 @@ As etapas 3 e 4 rodam sem parada, mas mostre uma amostra das legendas traduzidas
 - Quantos momentos, quantos legendados e de quais idiomas.
 - Vídeos descartados ou com falha, e por quê.
 - Shorts gerados: quantos, caminho de cada um em `output/shorts/` e o título proposto (de `shorts.json`).
+- O `render` grava o compilado no histórico (`data/history.jsonl`); depois de publicar, registre o link com `gtakit published`.
 - Resultado do `gtakit ready`: pronto ou bloqueado, e quem ainda não autorizou (risco de Content ID/strike).

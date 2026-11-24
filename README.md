@@ -25,6 +25,9 @@ Os arquivos de cada compilado ficam em `projects/<slug>/`. A execução de cada 
 ## Marca do canal
 Preencha `channel_handle` (e, se quiser, `logo`, cores e `fps: 60`) em `config/brand.json` para ter abertura, marca d'água, logo e tela final. Detalhes em [`docs/MARCA.md`](docs/MARCA.md).
 
+## Histórico e métricas
+Cada compilado fica registrado em `data/history.jsonl` (clipes usados, duração, link do YouTube). Importe o CSV do YouTube Studio com `gtakit metrics-import` e veja `gtakit report`. Detalhes em [`docs/METRICAS.md`](docs/METRICAS.md).
+
 ## Requisitos
 - `ffmpeg`
 - `yt-dlp` (`pip install yt-dlp`)

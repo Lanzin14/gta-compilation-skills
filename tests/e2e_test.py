@@ -69,10 +69,14 @@ def make_video(out, segments, w=1280, h=720, keep_audio=True, cwd=None):
 NOW = 1_800_000_000  # horário fixo: a nota de viralidade não depende do relógio da máquina
 
 
+HISTORY = None  # arquivo de histórico temporário (definido em main): nunca o data/history.jsonl real
+
+
 def gtakit(*args):
     """Roda `python -m gtakit ...` como as skills fazem; devolve (código, saída)."""
+    env = dict(os.environ, GTAKIT_HISTORY=str(HISTORY)) if HISTORY else None
     r = sp.run([sys.executable, "-m", "gtakit", *map(str, args)], cwd=REPO, capture_output=True,
-               text=True, encoding="utf-8", errors="replace")
+               text=True, encoding="utf-8", errors="replace", env=env)
     return r.returncode, r.stdout + r.stderr
 
 
@@ -400,6 +404,38 @@ def framing_pipeline(root):
           "dividido: câmera do streamer (bloco claro) ocupa a metade de baixo")
 
 
+def history_checks(root):
+    print("== histórico e métricas")
+    entries = [json.loads(x) for x in HISTORY.read_text(encoding="utf-8").splitlines() if x.strip()] if HISTORY.exists() else []
+    slugs = {e["slug"]: e for e in entries}
+    check("teste" in slugs and slugs["teste"]["clips"] and slugs["teste"].get("render_s") and "enquadramento" not in slugs,
+          "render grava o compilado no histórico (clipes usados e tempo de render); projeto só de Shorts não entra")
+    # um novo compilado com um post já usado é avisado
+    P = root / "projects/segundo"
+    gtakit("init", P)
+    v1 = next(c for c in slugs["teste"]["clips"])
+    (P / "raw_meta.jsonl").write_text(json.dumps({"id": v1["video_id"], "webpage_url": v1["url"], "uploader": "x",
+                                                  "uploader_id": "x", "timestamp": NOW, "like_count": 1}) + "\n",
+                                      encoding="utf-8")
+    rc, o = gtakit("discovery", P, "--now", NOW)
+    v = json.loads((P / "discovery.json").read_text(encoding="utf-8"))["videos"][0]
+    check(rc == 0 and v["used_before"] == ["teste"] and "já foi usado" in o, "discovery avisa clipe já usado em compilado anterior")
+    rc, o = gtakit("published", root / "projects/teste", "--url", "https://youtu.be/AbCdEfGhIj1", "--title", "GTA RP: teste #1")
+    check(rc == 0, "published registra o link do YouTube")
+    csv_pt = root / "studio.csv"
+    csv_pt.write_text("Conteúdo,Título do vídeo,Visualizações,Tempo de exibição (horas),Inscritos,Impressões,"
+                      "Taxa de cliques de impressões (%)\nTotal,,1.300,40,5,20000,6,5\n"
+                      "AbCdEfGhIj1,GTA RP: teste #1,\"1.234\",\"38,5\",4,18000,\"6,8\"\n"
+                      "ZZZZZZZZZZZ,Outro vídeo,66,1,0,2000,\"3,3\"\n", encoding="utf-8")
+    rc, o = gtakit("metrics-import", csv_pt)
+    t1 = next(json.loads(x) for x in HISTORY.read_text(encoding="utf-8").splitlines() if '"slug": "teste"' in x)
+    m = t1.get("metrics") or {}
+    check(rc == 0 and m.get("views") == 1234 and m.get("watch_hours") == 38.5 and m.get("ctr") == 6.8 and "Outro vídeo" in o,
+          "metrics-import lê o CSV do YouTube Studio em PT (1.234 / 38,5 / 6,8) e lista o que não associou")
+    rc, o = gtakit("report")
+    check(rc == 0 and "1.234" in o and "média" in o, "report mostra views por compilado e por criador")
+
+
 def test_transcribe_script():
     print("== scripts/transcribe.py")
     import importlib.util
@@ -446,9 +482,16 @@ def main():
     test_permission_template()
     test_transcribe_script()
     root = pathlib.Path(tempfile.mkdtemp(prefix="gta-e2e-"))
+    global HISTORY
+    HISTORY = root / "data/history.jsonl"
+    real = REPO / "data/history.jsonl"
+    real_before = real.read_bytes() if real.exists() else None
     try:
         run_pipeline(root)
         framing_pipeline(root)
+        history_checks(root)
+        check((real.read_bytes() if real.exists() else None) == real_before,
+              "os testes não tocam no histórico real (data/history.jsonl)")
     finally:
         if "--keep" in sys.argv:
             print(f"Arquivos mantidos em {root}")

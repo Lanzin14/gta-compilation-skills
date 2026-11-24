@@ -9,6 +9,7 @@ Skills do Claude Code que produzem compilados de GTA para o YouTube a partir de 
 - `scripts/transcribe.py` — transcrição + detecção de idioma (faster-whisper, ou openai-whisper como reserva).
 - Marca do canal: `config/brand.json` (`docs/MARCA.md`); sem `channel_handle`, a marca fica desligada — nunca invente o nome do canal.
 - Ranking de clipes: `gtakit/ranking.py`, pesos/limites em `config/ranking.json`, documentação em `docs/RANKING.md` (mudou um número ou regra, atualize o doc e `tests/test_ranking.py`).
+- Histórico e métricas: `gtakit/history.py`, `data/history.jsonl` (fora do Git), CSV do YouTube Studio via `metrics-import` (`docs/METRICAS.md`). Testes usam `GTAKIT_HISTORY` temporário — nunca o histórico real.
 - Cada compilado vive em `projects/<slug>/` (ignorado pelo Git: contém vídeos e textos de terceiros).
 - `tests/test_gtakit.py` — testes de unidade (funções puras, sem ffmpeg).
 - `tests/e2e_test.py` — teste ponta a ponta com vídeos sintéticos, pela linha de comando do gtakit; roda no GitHub Actions a cada PR (Linux e Windows).

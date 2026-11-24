@@ -11,7 +11,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from gtakit import analysis, render, rights, thumbs, timeline, viral  # noqa: E402
+from gtakit import analysis, history, render, rights, thumbs, timeline, viral  # noqa: E402
 from gtakit.__main__ import _from_ytdlp  # noqa: E402
 from gtakit.project import Project, check_items, save_json  # noqa: E402
 
@@ -192,6 +192,52 @@ class Thumbnails(unittest.TestCase):
     def test_unknown_layout_is_an_error(self):
         with self.assertRaises(ValueError):
             thumbs.layout_filter("diagonal", "t.txt")
+
+
+class History(unittest.TestCase):
+    def test_numbers_in_pt_and_en_formats(self):
+        cases = {"1.234": 1234, "1,234": 1234, "4,5": 4.5, "4.5%": 4.5, "0:01:23": 83, "1.234.567": 1234567,
+                 "3,456,789.5": 3456789.5, "-": None, "": None}
+        for s, want in cases.items():
+            self.assertEqual(history._num(s), want, s)
+
+    def test_youtube_id_from_links(self):
+        for u in ("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=3", "https://youtu.be/dQw4w9WgXcQ",
+                  "https://youtube.com/shorts/dQw4w9WgXcQ", "dQw4w9WgXcQ"):
+            self.assertEqual(history.youtube_id(u), "dQw4w9WgXcQ")
+        self.assertIsNone(history.youtube_id("https://x.com/a/status/1"))
+
+    def test_used_before_matches_post_url_or_media(self):
+        past = [{"slug": "a", "clips": [{"post_id": "10", "url": "https://x.com/u/status/10", "video_id": "m1"}]}]
+        self.assertEqual(history.used_before(past, {"post_id": "10"}), ["a"])
+        self.assertEqual(history.used_before(past, {"url": "https://x.com/u/status/10?s=20"}), ["a"])
+        self.assertEqual(history.used_before(past, {"id": "m1"}), ["a"])
+        self.assertEqual(history.used_before(past, {"post_id": "10"}, exclude_slug="a"), [])
+
+    def test_upsert_keeps_link_and_metrics(self):
+        old = [{"slug": "a", "youtube": {"video_id": "x"}, "metrics": {"views": 5}}]
+        new = history.upsert(old, {"slug": "a", "clips": [1], "youtube": None, "metrics": None})
+        self.assertEqual(new[0]["youtube"], {"video_id": "x"})
+        self.assertEqual(new[0]["metrics"], {"views": 5})
+        self.assertEqual(new[0]["clips"], [1])
+
+    def test_studio_csv_in_english(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = pathlib.Path(d, "s.csv")
+            f.write_text("Content,Video title,Views,Watch time (hours),Impressions click-through rate (%)\n"
+                         "Total,,10,1,5\nAbCdEfGhIj1,My video,\"1,234\",12.5,7.2\n", encoding="utf-8")
+            rows = history.parse_studio_csv(f)
+        self.assertEqual(rows, [{"video_id": "AbCdEfGhIj1", "title": "My video", "views": 1234.0,
+                                 "watch_hours": 12.5, "ctr": 7.2}])
+
+    def test_metrics_match_by_id_then_title(self):
+        entries = [{"slug": "a", "youtube": {"video_id": "AbCdEfGhIj1", "title": "X"}},
+                   {"slug": "b", "youtube": {"video_id": None, "title": "Meu vídeo"}}]
+        un = history.apply_metrics(entries, [{"video_id": "AbCdEfGhIj1", "views": 1.0},
+                                             {"video_id": "", "title": "meu vídeo", "views": 2.0},
+                                             {"video_id": "ZZZZZZZZZZZ", "title": "?", "views": 3.0}], "agora")
+        self.assertEqual((entries[0]["metrics"]["views"], entries[1]["metrics"]["views"]), (1.0, 2.0))
+        self.assertEqual(un, ["?"])
 
 
 class Render(unittest.TestCase):

@@ -87,5 +87,9 @@ description: Prepara título, descrição, tags, capítulos, créditos e demais 
 - `publish_ready` só é `true` com todas as permissões registradas ou com o risco aceito explicitamente pelo usuário (fica registrado no `publish_check.json`).
 - Recomende transformação (comentário, edição, legendas) e créditos visíveis — reduz o risco, mas **não** garante uso justo.
 
+## Depois que o usuário publicar
+- Registre o link: `py -3 -m gtakit published projects/<slug> --url "<link>" --title "<título>"`.
+- Para acompanhar o desempenho, peça o CSV exportado do YouTube Studio e rode `gtakit metrics-import <arquivo.csv>` e `gtakit report` ([docs/METRICAS.md](../../../docs/METRICAS.md)).
+
 ## Upload
 - Não faça upload por conta própria. Se o usuário pedir, explique que é preciso a YouTube Data API v3 (OAuth do próprio usuário) e peça autorização explícita antes de qualquer envio.
