@@ -434,7 +434,7 @@ def cmd_thumbnails(proj, a):
             items.append({"n": len(files), "file": name, "moment_id": c["moment_id"], "t": c["t"], "style": style,
                           "yavg": c["yavg"], "blur": c["blur"], "kb": size // 1024})
             print(f"{len(files)}: {name} (quadro {c['t']}s, brilho {c['yavg']}, borrão {c['blur']}, {size // 1024} KB)")
-    rc, o = ff.run(thumbs.sheet_args(files, "output/thumbs/escolha.jpg"), cwd=proj.dir)
+    rc, o = ff.run_drawtext(thumbs.sheet_args(files, "output/thumbs/escolha.jpg"), cwd=proj.dir)  # números = drawtext
     if rc:
         return _err(f"folha de comparação: {o.strip()[-300:]}")
     save_json(proj.p("output", "thumbs", "candidatas.json"), items)
