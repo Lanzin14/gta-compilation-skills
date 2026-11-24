@@ -179,3 +179,14 @@ def frame_probe(video, t, cwd=None):
         for col in range(8):
             bits = (bits << 1) | (px[row * 9 + col] > px[row * 9 + col + 1])
     return float(y[0]) if y else 0.0, float(b[0]) if b else 0.0, bits
+
+
+def motion_frames(path, start, duration, fps=4, w=32, h=18, cwd=None):
+    """Quadros minúsculos (w×h, cinza) do trecho, para medir ONDE há movimento. Lista de bytes."""
+    r = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(path), "-an",
+                        "-vf", f"fps={fps},scale={w}:{h}:flags=area,format=gray", "-f", "rawvideo", "-"],
+                       capture_output=True, cwd=cwd)
+    if r.returncode:
+        raise FFmpegError(f"quadros de movimento de {path}: {r.stderr.decode('utf-8', 'replace')[-300:]}")
+    n = w * h
+    return [r.stdout[i:i + n] for i in range(0, len(r.stdout) - n + 1, n)]

@@ -57,8 +57,10 @@ def compilation_filter(video, subtitle=None, credit_file=None, fps=30, brand=Non
 
 
 def short_filter(video, subtitle=None, credit_file=None, fps=30, brand=None, wm_file=None, logo_rel=None,
-                 duration=None, fade=None):
-    if is_vertical(video):
+                 duration=None, fade=None, base=None):
+    if base:  # enquadramento escolhido pelo gtakit/framing.py (recorte, dividido, desfocado)
+        vf = base
+    elif is_vertical(video):
         vf = f"scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps={fps},"
     else:
         vf = ("split[a][b];[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:2[bg];"

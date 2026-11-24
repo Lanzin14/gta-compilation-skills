@@ -16,7 +16,8 @@ Comandos (na ordem do fluxo):
   thumbnail  gera output/thumbnail.jpg no pico do melhor momento
   thumbnails gera 3–5 candidatas (2 estilos) + folha de comparação output/thumbs/escolha.jpg
   thumbnail-pick  copia a candidata escolhida para output/thumbnail.jpg
-  shorts     gera os Shorts verticais em output/shorts/
+  shorts     gera os Shorts verticais em output/shorts/ (--layout auto|crop|split|blur)
+  facecam    marca a região da câmera do streamer num vídeo (para Shorts "dividido")
   credit     define o criador original de um vídeo (ex.: o streamer do clipe)
   permissions  gera permissions.md com as mensagens de pedido de permissão
   rights-set / rights-list / rights-sync   registro de permissões (data/permissions.json)
@@ -33,7 +34,7 @@ import time
 
 import shutil
 
-from . import analysis, brand as brandmod, ff, ranking, render, rights, thumbs, timeline, viral
+from . import analysis, brand as brandmod, ff, framing, ranking, render, rights, thumbs, timeline, viral
 from .project import Project, load_json, save_json
 
 
@@ -76,13 +77,14 @@ def _brand_assets(proj, brand):
     return "brand/watermark.txt", logo
 
 
-def _encode_moment(proj, m, v, out, vf_fn, brand, preset, start=None, dur=None, faststart=False):
+def _encode_moment(proj, m, v, out, vf_fn, brand, preset, start=None, dur=None, faststart=False, base=None):
     start = m["start"] if start is None else start
     dur = m["end"] - m["start"] if dur is None else dur
     fade = brand["transition"]["seconds"] if brand["transition"]["type"] == "fade" else None
     wm, logo = _brand_assets(proj, brand)
+    extra = {"base": base} if base else {}
     vf = vf_fn(v, m.get("subtitle_pt"), _credit_file(proj, v), fps=brand["fps"], brand=brand, wm_file=wm,
-               logo_rel=logo, duration=dur, fade=fade)
+               logo_rel=logo, duration=dur, fade=fade, **extra)
     af = None
     if v["has_audio"]:
         meas = ff.loudnorm_measure(m["source"], start, dur, cwd=proj.dir) if brand["audio_two_pass"] else None
@@ -468,7 +470,19 @@ def cmd_shorts(proj, a):
         v = by[m["video_id"]]
         start, dur = render.short_window(m)
         out = f"output/shorts/{n:02d}_{m['id']}.mp4"
-        rc, o = _encode_moment(proj, m, v, out, render.short_filter, brand, a.preset, start=start, dur=dur, faststart=True)
+        keys, conc = [(0.0, 0.5)], 0.0
+        if not render.is_vertical(v):
+            prof = framing.column_motion(ff.motion_frames(m["source"], start, dur, fps=framing.FPS, cwd=proj.dir))
+            path, conc = framing.track(prof)
+            keys = framing.keyframes(path)
+        try:
+            layout, why = framing.choose_layout(v, conc, a.layout)
+        except ValueError as exc:
+            return _err(str(exc))
+        base = framing.base_filter(layout, v, keys, brand["fps"])
+        print(f"{m['id']}: enquadramento {layout} — {why}")
+        rc, o = _encode_moment(proj, m, v, out, render.short_filter, brand, a.preset, start=start, dur=dur,
+                               faststart=True, base=base)
         if rc:
             return _err(f"short {m['id']}: {o.strip()[-400:]}")
         info = ff.media_info(out, cwd=proj.dir)
@@ -476,6 +490,7 @@ def cmd_shorts(proj, a):
         creator = (v.get("original_creator") or {}).get("name")
         origin = f"{creator} — clipe de {v.get('author_handle')}" if creator else f"{v.get('author')} ({v.get('author_handle')})"
         items.append({"file": pathlib.Path(out).name, "moment_id": m["id"], "title": None,
+                      "layout": layout, "layout_reason": why,
                       "description": f"Clipe original: {origin} — {v.get('url')}\n#GTA5 #GTARP #Shorts",
                       "duration_s": info["duration_s"]})
         print(f"{out}: {info['width']}x{info['height']} {info['duration_s']}s {'ok' if ok else 'FORA DO PADRÃO'}")
@@ -587,6 +602,26 @@ def cmd_ready(proj, a):
     return 0 if res["publish_ready"] else 3
 
 
+def cmd_facecam(proj, a):
+    disc = _videos(proj)
+    v = next((v for v in disc["videos"] if v["id"] == a.video_id), None)
+    if v is None:
+        return _err(f"vídeo {a.video_id} não está no discovery.json")
+    if a.clear:
+        v["facecam"] = None
+    else:
+        try:
+            x, y, w, h = (float(n) for n in a.box.split(","))
+        except ValueError:
+            return _err("--box precisa de 4 números entre 0 e 1: x,y,largura,altura (ex.: 0.75,0.70,0.25,0.30)")
+        if not (0 <= x < 1 and 0 <= y < 1 and 0 < w <= 1 - x + 1e-6 and 0 < h <= 1 - y + 1e-6):
+            return _err("a região precisa caber na imagem (frações de 0 a 1)")
+        v["facecam"] = {"x": x, "y": y, "w": w, "h": h}
+    save_json(proj.p("discovery.json"), disc)
+    print(f"{v['id']}: câmera do streamer = {v['facecam']}")
+    return 0
+
+
 def cmd_validate(proj, a):
     errors = proj.validate()
     for e in errors:
@@ -640,6 +675,8 @@ def main(argv=None):
     add("thumbnail-pick", cmd_thumbnail_pick).add_argument("n", type=int)
     s = add("shorts", cmd_shorts)
     s.add_argument("--count", type=int, default=3)
+    s.add_argument("--layout", default="auto", choices=["auto", "crop", "split", "blur"],
+                   help="auto: escolhe por vídeo (vertical, câmera marcada, ação concentrada ou espalhada)")
     s.add_argument("--preset", default="medium")
     s = add("credit", cmd_credit)
     s.add_argument("video_id")
@@ -668,6 +705,10 @@ def main(argv=None):
     s = sub.add_parser("rights-list")
     s.add_argument("--ledger", default=rights.DEFAULT_LEDGER)
     s.set_defaults(fn=cmd_rights_list, project=None)
+    s = add("facecam", cmd_facecam)
+    s.add_argument("video_id")
+    s.add_argument("--box", help="x,y,largura,altura em frações da imagem (0 a 1)")
+    s.add_argument("--clear", action="store_true")
     add("validate", cmd_validate)
     add("status", cmd_status)
     a = ap.parse_args(argv)
