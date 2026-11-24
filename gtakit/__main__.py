@@ -13,6 +13,10 @@ Comandos (na ordem do fluxo):
   render     corta, padroniza e junta os clipes; gera output/compilation.mp4 e output/timeline.json
   thumbnail  gera output/thumbnail.jpg no pico do melhor momento
   shorts     gera os Shorts verticais em output/shorts/
+  credit     define o criador original de um vídeo (ex.: o streamer do clipe)
+  permissions  gera permissions.md com as mensagens de pedido de permissão
+  rights-set / rights-list / rights-sync   registro de permissões (data/permissions.json)
+  ready      confere se o compilado pode ser publicado (direitos) — bloqueia sem permissão
   validate   confere os contratos JSON entre as etapas
   status     mostra o estado das etapas
 """
@@ -23,7 +27,7 @@ import re
 import sys
 import time
 
-from . import analysis, ff, render, timeline, viral
+from . import analysis, ff, render, rights, timeline, viral
 from .project import Project, load_json, save_json
 
 
@@ -37,6 +41,25 @@ def _videos(proj):
     if disc is None:
         raise SystemExit(_err("discovery.json não existe; rode o comando discovery antes"))
     return disc
+
+
+def _credit_file(proj, v):
+    """Grava o texto do crédito em credits/<id>.txt (lido pelo drawtext como texto literal)."""
+    rel = f"credits/{v['id']}.txt"
+    proj.p("credits").mkdir(exist_ok=True)
+    proj.p(rel).write_text(rights.credit_text(v), encoding="utf-8")  # sem quebra de linha no fim
+    return rel
+
+
+def _used_videos(proj):
+    by = {v["id"]: v for v in _videos(proj)["videos"]}
+    tl = load_json(proj.p("output", "timeline.json"))
+    mom = load_json(proj.p("moments.json"), {"moments": []})
+    mids = {e["moment_id"] for e in tl["clips"]} if tl else {m["id"] for m in mom["moments"] if m.get("selected")}
+    shorts = load_json(proj.p("output", "shorts", "shorts.json"), [])
+    mids |= {s["moment_id"] for s in shorts}
+    vids = {m["video_id"] for m in mom["moments"] if m["id"] in mids}
+    return [by[i] for i in sorted(vids)]
 
 
 # ---------------------------------------------------------------- comandos
@@ -187,7 +210,7 @@ def cmd_render(proj, a):
     for n, m in enumerate(order, 1):
         v = by[m["video_id"]]
         clip = f"clips/{n:02d}_{m['id']}.mp4"
-        vf = render.compilation_filter(v, m.get("subtitle_pt"), v.get("author_handle"))
+        vf = render.compilation_filter(v, m.get("subtitle_pt"), _credit_file(proj, v))
         rc, o = ff.run_drawtext(render.encode_args(m["source"], m["start"], m["end"] - m["start"], v["has_audio"],
                                                    vf, clip, preset=a.preset), cwd=proj.dir)
         if rc:
@@ -263,15 +286,17 @@ def cmd_shorts(proj, a):
         v = by[m["video_id"]]
         start, dur = render.short_window(m)
         out = f"output/shorts/{n:02d}_{m['id']}.mp4"
-        vf = render.short_filter(v, m.get("subtitle_pt"), v.get("author_handle"))
+        vf = render.short_filter(v, m.get("subtitle_pt"), _credit_file(proj, v))
         rc, o = ff.run_drawtext(render.encode_args(m["source"], start, dur, v["has_audio"], vf, out,
                                                    preset=a.preset, faststart=True), cwd=proj.dir)
         if rc:
             return _err(f"short {m['id']}: {o.strip()[-400:]}")
         info = ff.media_info(out, cwd=proj.dir)
         ok = (info["width"], info["height"]) == (1080, 1920) and info["has_audio"] and info["duration_s"] <= 60.5
+        creator = (v.get("original_creator") or {}).get("name")
+        origin = f"{creator} — clipe de {v.get('author_handle')}" if creator else f"{v.get('author')} ({v.get('author_handle')})"
         items.append({"file": pathlib.Path(out).name, "moment_id": m["id"], "title": None,
-                      "description": f"Clipe original: {v.get('author')} ({v.get('author_handle')}) — {v.get('url')}\n#GTA5 #GTARP #Shorts",
+                      "description": f"Clipe original: {origin} — {v.get('url')}\n#GTA5 #GTARP #Shorts",
                       "duration_s": info["duration_s"]})
         print(f"{out}: {info['width']}x{info['height']} {info['duration_s']}s {'ok' if ok else 'FORA DO PADRÃO'}")
         if not ok:
@@ -279,6 +304,107 @@ def cmd_shorts(proj, a):
     save_json(proj.p("output", "shorts", "shorts.json"), items)
     proj.mark("shorts", "done", shorts=len(items))
     return 0
+
+
+def cmd_credit(proj, a):
+    disc = _videos(proj)
+    v = next((v for v in disc["videos"] if v["id"] == a.video_id), None)
+    if v is None:
+        return _err(f"vídeo {a.video_id} não está no discovery.json")
+    v["original_creator"] = None if a.clear else {"name": a.creator, "url": a.creator_url}
+    save_json(proj.p("discovery.json"), disc)
+    print(f"{v['id']}: crédito no vídeo = {rights.credit_text(v)!r}; quem autoriza = {rights.owner_of(v)}")
+    return 0
+
+
+def cmd_permissions(proj, a):
+    disc = _videos(proj)
+    tpl_path = pathlib.Path(__file__).resolve().parent.parent / ".claude/skills/gta-video-discovery/permission-template.md"
+    templates = rights.parse_templates(tpl_path.read_text(encoding="utf-8"))
+    ledger = rights.Ledger(a.ledger)
+    channel = a.channel or "<nome do canal>"
+    out = ["# Pedidos de permissão", "",
+           "Envie você mesmo (DM ou resposta ao post). Depois registre a resposta com `gtakit rights-set`.",
+           "Créditos e marca d'água **não** substituem a autorização.", ""]
+    seen, problems = set(), []
+    for v in disc["videos"]:
+        if not v.get("approved"):
+            continue
+        owner = rights.owner_of(v)
+        if ledger.status_for(v) == "granted" or rights.key(owner) in seen:
+            continue
+        seen.add(rights.key(owner))
+        lang = a.lang if a.lang != "auto" else rights.guess_lang(v.get("text"))
+        target = dict(v)
+        creator = (v.get("original_creator") or {}).get("name")
+        if creator:  # o conteúdo é do criador original: o pedido vai para ele
+            target["author_handle"] = creator
+        out += [f"## {owner}", f"- Post: {v.get('url')}",
+                f"- Clipador: {v.get('author_handle')}" if creator else "- Autor do post",
+                f"- Idioma: {lang}", ""]
+        for kind in ("dm", "reply"):
+            tpl = templates.get(lang, templates["pt"]).get(kind)
+            if not tpl:
+                continue
+            msg = rights.fill(tpl, target, channel)
+            n = rights.x_length(msg)
+            if n > 280:
+                problems.append(f"{owner} ({kind}): {n} caracteres")
+            out += [f"**{'DM' if kind == 'dm' else 'Resposta ao post'}** ({n}/280)", "```", msg, "```", ""]
+    proj.p("permissions.md").write_text("\n".join(out), encoding="utf-8")
+    print(f"permissions.md: {len(seen)} pedido(s)")
+    if not a.channel:
+        print("aviso: nome do canal não informado (--channel); as mensagens ficaram com <nome do canal>")
+    return _err("mensagem acima de 280 caracteres: " + "; ".join(problems)) if problems else 0
+
+
+def cmd_rights_set(a):
+    led = rights.Ledger(a.ledger)
+    try:
+        e = led.set(a.name, a.status, evidence=a.evidence, post_id=a.post, notes=a.notes)
+    except ValueError as exc:
+        return _err(str(exc))
+    print(f"{a.name}: {a.status}{' (post ' + a.post + ')' if a.post else ''} registrado em {led.path}")
+    return 0
+
+
+def cmd_rights_list(a):
+    led = rights.Ledger(a.ledger)
+    people = led.data["people"]
+    if not people:
+        print("nenhuma permissão registrada")
+    for k, e in sorted(people.items()):
+        posts = ", ".join(f"{p}={x['status']}" for p, x in e.get("posts", {}).items())
+        print(f"{e['name']:<24} {e.get('status', '-'):<10} {e.get('evidence') or ''} {('posts: ' + posts) if posts else ''}")
+    return 0
+
+
+def cmd_rights_sync(proj, a):
+    disc = _videos(proj)
+    changes = rights.sync_project(disc, rights.Ledger(a.ledger))
+    save_json(proj.p("discovery.json"), disc)
+    for c in changes:
+        print(f"{c[0]}: {c[1]} -> {c[2]}")
+    print(f"{len(changes)} alteração(ões)")
+    return 0
+
+
+def cmd_ready(proj, a):
+    disc = _videos(proj)
+    rights.sync_project(disc, rights.Ledger(a.ledger))
+    save_json(proj.p("discovery.json"), disc)
+    used = _used_videos(proj)
+    if not used:
+        return _err("nenhum vídeo usado ainda (rode o render ou o shorts antes)")
+    res = rights.publish_check(used, {"reason": a.accept_risk} if a.accept_risk else None)
+    save_json(proj.p("output", "publish_check.json"), res)
+    for p in res["pending"]:
+        print(f"  sem permissão: {p['id']} — falta autorização de {p['owner']} ({p['rights']})")
+    if res["override"]:
+        print(f"RISCO ACEITO PELO USUÁRIO: {res['override']['reason']}")
+    print("PRONTO PARA PUBLICAR" if res["publish_ready"] else "BLOQUEADO: faltam permissões (veja acima)")
+    proj.mark("publish", "ready" if res["publish_ready"] else "blocked")
+    return 0 if res["publish_ready"] else 3
 
 
 def cmd_validate(proj, a):
@@ -324,9 +450,38 @@ def main(argv=None):
     s = add("shorts", cmd_shorts)
     s.add_argument("--count", type=int, default=3)
     s.add_argument("--preset", default="medium")
+    s = add("credit", cmd_credit)
+    s.add_argument("video_id")
+    s.add_argument("--creator", help="nome do criador original, ex.: alanzoka")
+    s.add_argument("--creator-url", default=None)
+    s.add_argument("--clear", action="store_true")
+    s = add("permissions", cmd_permissions)
+    s.add_argument("--channel", default=None, help="nome do seu canal (vai nas mensagens)")
+    s.add_argument("--lang", default="auto", choices=["auto", "pt", "en", "es"])
+    s.add_argument("--ledger", default=rights.DEFAULT_LEDGER)
+    s = add("rights-sync", cmd_rights_sync)
+    s.add_argument("--ledger", default=rights.DEFAULT_LEDGER)
+    s = add("ready", cmd_ready)
+    s.add_argument("--accept-risk", default=None, metavar="MOTIVO",
+                   help="só com decisão explícita do usuário: publica mesmo sem permissão, registrando o motivo")
+    s.add_argument("--ledger", default=rights.DEFAULT_LEDGER)
+    # comandos do registro de permissões (não dependem de um projeto)
+    s = sub.add_parser("rights-set")
+    s.add_argument("name", help="@handle ou nome de quem autorizou/negou")
+    s.add_argument("--status", required=True, choices=rights.STATUSES)
+    s.add_argument("--evidence", default=None, help="link da resposta ou caminho do print (obrigatório para granted)")
+    s.add_argument("--post", default=None, help="post_id, se a permissão vale só para um post")
+    s.add_argument("--notes", default=None)
+    s.add_argument("--ledger", default=rights.DEFAULT_LEDGER)
+    s.set_defaults(fn=cmd_rights_set, project=None)
+    s = sub.add_parser("rights-list")
+    s.add_argument("--ledger", default=rights.DEFAULT_LEDGER)
+    s.set_defaults(fn=cmd_rights_list, project=None)
     add("validate", cmd_validate)
     add("status", cmd_status)
     a = ap.parse_args(argv)
+    if a.project is None:  # comandos do registro de permissões
+        return a.fn(a)
     proj = Project(a.project)
     try:
         ff.require_tools()

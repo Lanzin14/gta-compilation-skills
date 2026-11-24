@@ -115,6 +115,10 @@ def run_pipeline(root):
     check(by["v1"]["viral_score"] == 100, "vídeo mais engajado → nota 100")
     check(not by["v3"]["has_audio"] and by["v1"]["has_audio"], "has_audio detecta vídeo mudo")
     check(by["v1"]["post_id"] == "90" and by["v1"]["author_handle"] == "@ana_gta", "post_id e @ extraídos do yt-dlp")
+    # crédito difícil de propósito: apóstrofo, dois-pontos, %, chaves e emoji (drawtext costuma quebrar com eles)
+    tricky = "d'Ana: 100% {x} 😂"
+    rc, o = gtakit("credit", P, "v2", "--creator", tricky)
+    check(rc == 0 and "clipe @beto_rp" in o, "gtakit credit define o criador original (crédito duplo)")
 
     # ---- 2. viral-moment-analyzer ----
     print("== 2. viral-moment-analyzer")
@@ -177,6 +181,8 @@ def run_pipeline(root):
     check([c["moment_id"] for c in clips][-1] == m["v1"]["id"], "compilado fecha com o melhor momento")
     check("clip_start" not in json.dumps(json.loads((P / "moments.json").read_text(encoding="utf-8"))),
           "render não escreve no moments.json (clip_start fica no timeline.json)")
+    check((P / "credits/v2.txt").read_text(encoding="utf-8") == "d'Ana: 100% {x} | clipe @beto_rp",
+          "crédito com ' : % { } renderizado via arquivo, sem quebrar o ffmpeg (emoji removido do vídeo)")
 
     # ---- 5. youtube-publisher ----
     print("== 5. youtube-publisher")
@@ -214,6 +220,34 @@ def run_pipeline(root):
                   and "audio" in st_ and float(info["format"]["duration"]) <= 60.5,
                   f"short {m[vid]['id']}: 1080x1920, com áudio, {float(info['format']['duration']):.1f}s ≤ 60 s")
     check(all(x["description"].startswith("Clipe original:") for x in shorts), "todo Short tem crédito na descrição")
+
+    # ---- direitos: créditos não substituem autorização ----
+    print("== direitos e permissões")
+    L = root / "data/permissions.json"
+    rc, o = gtakit("permissions", P, "--channel", "Canal Teste", "--ledger", L)
+    pm = (P / "permissions.md").read_text(encoding="utf-8") if rc == 0 else ""
+    check(rc == 0 and f"## {tricky}" in pm and "## @ana_gta" in pm and "<nome do canal>" not in pm,
+          "permissions.md com um pedido por dono do conteúdo (criador original, não o clipador)")
+    check(all(int(n) <= 280 for n in re.findall(r"\((\d+)/280\)", pm)), "mensagens geradas cabem em 280 caracteres")
+    rc, o = gtakit("ready", P, "--ledger", L)
+    check(rc == 3 and "BLOQUEADO" in o, "ready bloqueia a publicação sem permissões")
+    rc, o = gtakit("rights-set", "@beto_rp", "--status", "granted", "--ledger", L)
+    check(rc != 0 and "prova" in o, "permissão concedida exige prova (--evidence)")
+    owners = ["@ana_gta", tricky, "@caio", "@dani", "@fe"]
+    for who in owners:
+        gtakit("rights-set", who, "--status", "granted", "--evidence", f"https://x.com/print/{len(who)}", "--ledger", L)
+    rc, o = gtakit("ready", P, "--ledger", L)
+    pc = json.loads((P / "output/publish_check.json").read_text(encoding="utf-8"))
+    check(rc == 0 and pc["publish_ready"] and pc["override"] is None, "com todas as permissões registradas, ready libera")
+    L2 = root / "data/vazio.json"
+    rc, o = gtakit("ready", P, "--ledger", L2, "--accept-risk", "decisão do usuário: uso transformativo")
+    pc = json.loads((P / "output/publish_check.json").read_text(encoding="utf-8"))
+    check(rc == 0 and pc["override"]["reason"].startswith("decisão do usuário") and pc["pending"],
+          "sem permissões, só libera com aceite explícito do risco (motivo registrado, pendências mantidas)")
+    gtakit("rights-set", "@fe", "--status", "denied", "--ledger", L)
+    rc, o = gtakit("rights-sync", P, "--ledger", L)
+    v6 = next(v for v in json.loads((P / "discovery.json").read_text(encoding="utf-8"))["videos"] if v["id"] == "v6")
+    check(rc == 0 and v6["rights"] == "denied" and not v6["approved"], "permissão negada tira o vídeo do compilado")
 
     # ---- contratos e estado ----
     print("== contratos entre etapas")

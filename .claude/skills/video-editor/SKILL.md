@@ -28,7 +28,7 @@ Quarta etapa: **discovery → viral-moment-analyzer → video-translator → vid
 - **Ordem:** abre com o 2º melhor momento (gancho nos primeiros 5 s), fecha com o melhor; desempate pela viralidade. Evite dois clipes do mesmo autor em sequência (reordene em `moments.json` se precisar).
 - **Padronização** (necessária para juntar sem recodificar): 1920x1080, 30 fps, H.264 `-crf 20`, AAC 192 kbps 48 kHz estéreo, volume normalizado (`loudnorm=I=-14:TP=-1.5:LRA=11`).
 - **Vídeo horizontal:** escala + barras (`pad`). **Vertical:** fundo desfocado do próprio vídeo atrás.
-- **Legenda** (`subtitle_pt`): queimada com `FontSize=22,Outline=2,MarginV=40`. **Crédito:** `@autor` no canto superior direito.
+- **Legenda** (`subtitle_pt`): queimada com `FontSize=22,Outline=2,MarginV=40`. **Crédito:** no canto superior direito, `@autor` ou `criador | clipe @autor` (lido de `credits/<id>.txt` com `expansion=none`: qualquer caractere funciona; emojis são removidos porque a fonte não os desenha).
 - **Vídeo mudo:** recebe faixa de silêncio (sem ela, a junção deixa um buraco no áudio) e não passa pelo `loudnorm`.
 - **Corte:** `-ss <start> -t <duração>` antes do `-i` (o `-to` antes do `-i` não funciona em ffmpeg antigo).
 - **Fonte:** se o ffmpeg disser `Cannot find a valid font` (comum no Windows), o gtakit tenta de novo com `C:/Windows/Fonts/arial.ttf` (Linux: DejaVu).

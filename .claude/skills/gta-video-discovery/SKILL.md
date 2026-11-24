@@ -75,7 +75,8 @@ velocidade  = engajamento / horas
 | `platform` | `x`, `youtube` |
 | `category` | `fail`, `funny`, `stunt`, `chase`, `rp_drama`, `glitch`, `other` |
 | `game` | `gta5`, `gta_online`, `gta_rp`, `gta6`, `other` |
-| `rights` | `unknown`, `permission_requested`, `permission_granted` |
+| `rights` | `unknown`, `permission_requested`, `permission_granted`, `denied` |
+| `original_creator` | `null` ou `{"name": "alanzoka", "url": null}` (dono do conteúdo quando o post é um corte) |
 
 ## Saída: `projects/<slug>/discovery.json`
 ```json
@@ -106,6 +107,7 @@ velocidade  = engajamento / horas
       "category": "funny",
       "game": "gta_rp",
       "rights": "unknown",
+      "original_creator": null,
       "approved": true,
       "has_audio": true,
       "local_path": "source/1857999999999999999.mp4",
@@ -116,8 +118,25 @@ velocidade  = engajamento / horas
 ```
 
 ## Direitos autorais (obrigatório)
-- Guarde sempre `author_handle` e `url`: a video-editor mostra o `@` no vídeo e a youtube-publisher lista os créditos.
-- **Pedidos de permissão:** depois da aprovação da lista, gere `projects/<slug>/permissions.md` com uma mensagem pronta por autor, usando os modelos de [permission-template.md](permission-template.md) no idioma do post (nome do canal: pergunte uma vez ao usuário). Cada item: `@autor`, link do post, mensagem preenchida.
-  - **O usuário envia manualmente** (DM ou resposta). Nunca envie mensagens nem automatize o X.
-  - Quando o usuário disser que enviou ou que recebeu resposta, atualize `rights` conforme a tabela do modelo. Autor que negou: tire o vídeo (`approved: false`).
-- Avise que vídeos com `rights: unknown` podem gerar reivindicação ou strike no YouTube.
+**Crédito e marca d'água não substituem autorização.** Quem precisa autorizar é o **dono do conteúdo**: o criador original (ex.: o streamer de quem é a live) ou, se o post for do próprio jogador, o autor do post. A permissão só do clipador não libera o corte da live de outra pessoa.
+
+1. **Criador original:** se o vídeo for corte da live/vídeo de outra pessoa (texto do post, marca d'água, câmera de outro streamer), registre:
+   ```bash
+   py -3 -m gtakit credit projects/<slug> <video_id> --creator "alanzoka"
+   ```
+   O crédito no vídeo vira `alanzoka | clipe @clipador`, e o pedido de permissão vai para o criador.
+2. **Pedidos de permissão:** depois da aprovação da lista, gere as mensagens (uma por dono do conteúdo, no idioma do post, até 280 caracteres, a partir de [permission-template.md](permission-template.md)):
+   ```bash
+   py -3 -m gtakit permissions projects/<slug> --channel "<nome do canal>"
+   ```
+   - **O usuário envia manualmente** (DM ou resposta). Nunca envie mensagens nem automatize o X.
+3. **Registre cada resposta** no registro local `data/permissions.json` (fora do Git, vale para os próximos compilados):
+   ```bash
+   py -3 -m gtakit rights-set "alanzoka" --status granted --evidence "<link da resposta ou caminho do print>"
+   py -3 -m gtakit rights-set "@fulano" --status requested          # pedido enviado, sem resposta
+   py -3 -m gtakit rights-set "@ciclano" --status denied            # negou: o vídeo sai do compilado
+   py -3 -m gtakit rights-sync projects/<slug>                      # aplica o registro ao discovery.json
+   ```
+   - `granted` exige prova (`--evidence`). Permissão só para um post: `--post <post_id>`.
+   - `rights-list` mostra o que já está registrado.
+4. Avise que vídeos sem permissão (`rights` ≠ `permission_granted`) podem gerar reivindicação ou strike no YouTube.

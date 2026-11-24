@@ -9,7 +9,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from gtakit import analysis, render, timeline, viral  # noqa: E402
+from gtakit import analysis, render, rights, timeline, viral  # noqa: E402
 from gtakit.__main__ import _from_ytdlp  # noqa: E402
 from gtakit.project import Project, check_items, save_json  # noqa: E402
 
@@ -113,8 +113,10 @@ class Render(unittest.TestCase):
         self.assertIn("anullsrc=r=48000:cl=stereo", args)
         self.assertNotIn("-af", args)
 
-    def test_apostrophe_in_credit_is_escaped(self):
-        self.assertIn("drawtext=text='d'\\''ana'", render.compilation_filter({"width": 2, "height": 1}, credit="d'ana"))
+    def test_credit_is_read_from_file_without_expansion(self):
+        vf = render.compilation_filter({"width": 2, "height": 1}, credit_file="credits/v.txt")
+        self.assertIn("drawtext=textfile=credits/v.txt:expansion=none:", vf)
+        self.assertNotIn("text='", vf)
 
 
 class Contracts(unittest.TestCase):
@@ -135,6 +137,79 @@ class Contracts(unittest.TestCase):
                          "uploader_id": "foo", "timestamp": 0, "like_count": 5})
         self.assertEqual((v["id"], v["post_id"], v["author_handle"], v["platform"], v["likes"], v["reposts"]),
                          ("123", "999", "@foo", "x", 5, None))
+
+
+class Rights(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.ledger = rights.Ledger(pathlib.Path(self.tmp.name, "permissions.json"))
+        self.clip = {"id": "v1", "post_id": "10", "author": "Fã", "author_handle": "@clipador",
+                     "original_creator": {"name": "alanzoka"}, "rights": "unknown", "approved": True}
+        self.own = {"id": "v2", "post_id": "20", "author_handle": "@jogador", "rights": "unknown", "approved": True}
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_credit_shows_creator_and_clipper(self):
+        self.assertEqual(rights.credit_text(self.clip), "alanzoka | clipe @clipador")
+        self.assertEqual(rights.credit_text(self.own), "@jogador")
+
+    def test_credit_drops_emoji_the_font_cannot_draw(self):
+        self.assertEqual(rights.credit_text(dict(self.own, author_handle="@gta 😂🔥 ⚡️fã")), "@gta fã")
+
+    def test_creator_must_authorize_not_the_clipper(self):
+        self.assertEqual(rights.owner_of(self.clip), "alanzoka")
+        self.ledger.set("@clipador", "granted", evidence="https://x.com/clipador/status/1")
+        self.assertEqual(self.ledger.status_for(self.clip), "unknown")
+        self.ledger.set("alanzoka", "granted", evidence="print.png")
+        self.assertEqual(self.ledger.status_for(self.clip), "granted")
+
+    def test_granted_requires_evidence(self):
+        with self.assertRaises(ValueError):
+            self.ledger.set("@jogador", "granted")
+
+    def test_post_specific_permission_overrides_general(self):
+        self.ledger.set("@jogador", "denied")
+        self.ledger.set("@jogador", "granted", evidence="dm.png", post_id="20")
+        self.assertEqual(self.ledger.status_for(self.own), "granted")
+        self.assertEqual(self.ledger.status_for(dict(self.own, post_id="99")), "denied")
+
+    def test_ledger_persists_between_projects(self):
+        self.ledger.set("@jogador", "granted", evidence="dm.png")
+        again = rights.Ledger(self.ledger.path)
+        self.assertEqual(again.status_for(self.own), "granted")
+
+    def test_sync_marks_rights_and_removes_denied(self):
+        self.ledger.set("alanzoka", "denied")
+        disc = {"videos": [self.clip, self.own]}
+        rights.sync_project(disc, self.ledger)
+        self.assertEqual((self.clip["rights"], self.clip["approved"]), ("denied", False))
+        self.assertEqual(self.own["rights"], "unknown")
+
+    def test_publish_blocked_until_permission_or_explicit_override(self):
+        self.assertFalse(rights.publish_check([self.own])["publish_ready"])
+        self.assertFalse(rights.publish_check([self.own], {"reason": "  "})["publish_ready"])
+        r = rights.publish_check([self.own], {"reason": "uso transformativo, decisão minha"})
+        self.assertTrue(r["publish_ready"])
+        self.assertEqual(r["override"]["reason"], "uso transformativo, decisão minha")
+        self.own["rights"] = "permission_granted"
+        r = rights.publish_check([self.own])
+        self.assertTrue(r["publish_ready"] and r["override"] is None)
+
+    def test_templates_parse_and_fit_280(self):
+        text = pathlib.Path(__file__).resolve().parent.parent.joinpath(
+            ".claude/skills/gta-video-discovery/permission-template.md").read_text(encoding="utf-8")
+        tpl = rights.parse_templates(text)
+        self.assertEqual(set(tpl), {"pt", "en", "es"})
+        self.assertEqual(set(tpl["pt"]), {"dm", "reply"})
+        msg = rights.fill(tpl["pt"]["dm"], dict(self.own, url="https://x.com/jogador/status/20"), "Canal GTA")
+        self.assertNotIn("<", msg)
+        self.assertLessEqual(rights.x_length(msg), 280)
+
+    def test_language_guess(self):
+        self.assertEqual(rights.guess_lang("puta que pariu esse clipe KKKKK"), "pt")
+        self.assertEqual(rights.guess_lang("bro this is insane lmao"), "en")
+        self.assertEqual(rights.guess_lang("jajaja pero qué es esto hermano"), "es")
 
 
 if __name__ == "__main__":

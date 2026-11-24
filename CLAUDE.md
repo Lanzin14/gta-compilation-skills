@@ -21,3 +21,4 @@ Skills do Claude Code que produzem compilados de GTA para o YouTube a partir de 
 - O frontmatter de cada skill tem só `name` (igual ao nome da pasta) e `description` (≤ 1024 caracteres).
 - Nunca faça upload no YouTube, nem raspe/automatize login no X. Nunca versione cookies ou arquivos de `projects/`.
 - Não invente métricas, timestamps ou falas: use só o que vier do `yt-dlp`, `ffmpeg` ou Whisper.
+- Créditos e marca d'água **não** substituem autorização de uso. Nunca use `gtakit ready --accept-risk` sem o usuário pedir explicitamente. O registro de permissões fica em `data/` (fora do Git).

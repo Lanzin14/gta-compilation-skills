@@ -10,3 +10,6 @@ projects/
 
 # Python
 __pycache__/
+
+# Dados locais do usuário (permissões, histórico) — não versionar
+data/
