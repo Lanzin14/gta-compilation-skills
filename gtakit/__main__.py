@@ -266,7 +266,10 @@ def cmd_render(proj, a):
     disc = _videos(proj)
     by = {v["id"]: v for v in disc["videos"]}
     mom = load_json(proj.p("moments.json"))
-    order = timeline.legacy_order(mom["moments"], {i: v["viral_score"] for i, v in by.items()})
+    if a.order == "legacy":
+        order, notes = timeline.legacy_order(mom["moments"], {i: v["viral_score"] for i, v in by.items()}), ["ordem antiga (legacy)"]
+    else:
+        order, notes = timeline.smart_order(mom["moments"], list(by.values()))
     if not order:
         return _err("nenhum momento selecionado")
     entries, lines = [], []
@@ -287,7 +290,9 @@ def cmd_render(proj, a):
         return _err(f"concatenação: {o.strip()[-400:]}")
     timeline.clip_starts(entries)
     chap = timeline.chapters(entries)
-    save_json(proj.p("output", "timeline.json"), {"clips": entries, "chapters": chap})
+    save_json(proj.p("output", "timeline.json"), {"clips": entries, "chapters": chap, "order_notes": notes})
+    for n in notes:
+        print(f"ordem: {n}")
     save_json(proj.p("output", "chapters.json"), [{"start": c["start"], "moment_ids": c["moment_ids"], "title": None} for c in chap])
     info = ff.media_info("output/compilation.mp4", cwd=proj.dir)
     total = sum(e["clip_dur"] for e in entries)
@@ -512,7 +517,10 @@ def main(argv=None):
     s.add_argument("--refresh", action="store_true", help="ignora o cache de medições")
     add("rank", cmd_rank)
     add("audio", cmd_audio).add_argument("--full", action="store_true")
-    add("render", cmd_render).add_argument("--preset", default="medium")
+    s = add("render", cmd_render)
+    s.add_argument("--preset", default="medium")
+    s.add_argument("--order", default="smart", choices=["smart", "legacy"],
+                   help="smart: gancho no início, melhor no fim, sem criador repetido em sequência")
     add("thumbnail", cmd_thumbnail).add_argument("--line", action="append", required=True, help="uma linha do texto (repita para 2 linhas)")
     s = add("shorts", cmd_shorts)
     s.add_argument("--count", type=int, default=3)

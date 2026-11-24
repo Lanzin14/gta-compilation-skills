@@ -2,7 +2,9 @@
 
     python3 -m unittest discover -s tests -p "test_*.py"
 """
+import itertools
 import pathlib
+import random
 import sys
 import tempfile
 import unittest
@@ -93,6 +95,77 @@ class Timeline(unittest.TestCase):
     def test_timestamp_format(self):
         self.assertEqual(timeline.fmt_ts(65), "01:05")
         self.assertEqual(timeline.fmt_ts(3725), "1:02:05")
+
+
+def _scenario(rnd, n, creators):
+    vids = [{"id": f"v{i}", "author_handle": f"@{rnd.choice(creators)}", "viral_score": rnd.randint(0, 100)} for i in range(n)]
+    ms = [{"id": f"m{i:02d}", "video_id": f"v{i}", "score": rnd.randint(40, 100), "start": 0.0,
+           "end": float(rnd.randint(6, 70)), "selected": True,
+           "ranking": {"criteria": {"reacao": rnd.randint(0, 100), "retencao": rnd.randint(0, 100)}}} for i in range(n)]
+    return vids, ms
+
+
+def _feasible(ms, vids, last):
+    who = {v["id"]: v["author_handle"] for v in vids}
+    rest = [m for m in ms if m is not last]
+    for perm in itertools.permutations(rest):
+        seq = list(perm) + [last]
+        if all(who[a["video_id"]] != who[b["video_id"]] for a, b in zip(seq, seq[1:])):
+            return True
+    return False
+
+
+class SmartOrder(unittest.TestCase):
+    def test_closes_with_best_and_never_repeats_creator_when_possible(self):
+        rnd = random.Random(42)
+        checked = 0
+        for _ in range(150):
+            vids, ms = _scenario(rnd, rnd.randint(3, 7), ["a", "b", "c"])
+            order, notes = timeline.smart_order(ms, vids)
+            who = {v["id"]: v["author_handle"] for v in vids}
+            best = max(ms, key=lambda m: (m["score"], next(v["viral_score"] for v in vids if v["id"] == m["video_id"]), m["id"]))
+            self.assertIs(order[-1], best)
+            self.assertEqual(sorted(m["id"] for m in order), sorted(m["id"] for m in ms))
+            adjacent_ok = all(who[a["video_id"]] != who[b["video_id"]] for a, b in zip(order, order[1:]))
+            if _feasible(ms, vids, best):
+                self.assertTrue(adjacent_ok, (notes, [(m["id"], who[m["video_id"]]) for m in order]))
+                checked += 1
+            else:
+                self.assertTrue(any("aviso" in n for n in notes))
+        self.assertGreater(checked, 50)
+
+    def test_order_is_deterministic_regardless_of_input_order(self):
+        rnd = random.Random(7)
+        vids, ms = _scenario(rnd, 8, ["a", "b", "c", "d"])
+        base = [m["id"] for m in timeline.smart_order(ms, vids)[0]]
+        for _ in range(10):
+            shuffled = ms[:]
+            rnd.shuffle(shuffled)
+            self.assertEqual([m["id"] for m in timeline.smart_order(shuffled, vids)[0]], base)
+
+    def test_opens_with_short_high_energy_hook(self):
+        vids = [{"id": i, "author_handle": f"@{i}", "viral_score": 50} for i in "abcd"]
+        mk = lambda i, s, d, r: {"id": i, "video_id": i, "score": s, "start": 0, "end": d, "selected": True,
+                                 "ranking": {"criteria": {"reacao": r, "retencao": r}}}
+        ms = [mk("a", 95, 40, 50), mk("b", 80, 12, 95), mk("c", 82, 60, 95), mk("d", 70, 20, 30)]
+        order = [m["id"] for m in timeline.smart_order(ms, vids)[0]]
+        self.assertEqual(order[0], "b")   # curto e com mais energia entre os bons
+        self.assertEqual(order[-1], "a")  # o melhor fecha
+
+    def test_original_creator_counts_as_the_same_person(self):
+        vids = [{"id": "v1", "author_handle": "@fa1", "original_creator": {"name": "alanzoka"}, "viral_score": 1},
+                {"id": "v2", "author_handle": "@fa2", "original_creator": {"name": "Alanzoka"}, "viral_score": 1},
+                {"id": "v3", "author_handle": "@outro", "viral_score": 1}]
+        ms = [{"id": f"m{i}", "video_id": f"v{i}", "score": s, "start": 0, "end": 20, "selected": True}
+              for i, s in ((1, 90), (2, 80), (3, 70))]
+        order = [m["video_id"] for m in timeline.smart_order(ms, vids)[0]]
+        self.assertNotEqual(order.index("v1") - order.index("v2"), 1)
+        self.assertNotEqual(order.index("v2") - order.index("v1"), 1)
+
+    def test_unselected_moments_are_ignored(self):
+        vids = [{"id": "v", "author_handle": "@a", "viral_score": 1}]
+        ms = [{"id": "m1", "video_id": "v", "score": 90, "start": 0, "end": 10, "selected": False}]
+        self.assertEqual(timeline.smart_order(ms, vids)[0], [])
 
 
 class Render(unittest.TestCase):
