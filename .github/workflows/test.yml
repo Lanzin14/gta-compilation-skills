@@ -22,12 +22,26 @@ jobs:
           python-version: ${{ matrix.python }}
           allow-prereleases: true
 
+      # Os pacotes .deb ficam no cache do GitHub: com o cache, o espelho do apt (que já travou por 20 min) quase não é usado.
+      - uses: actions/cache@v4
+        with:
+          path: ~/apt-cache
+          key: apt-ffmpeg-ubuntu-24.04-v1
+
       - name: Instalar ffmpeg e fontes
-        # O espelho do apt às vezes fica muito lento (já cancelou um job por tempo): mais tentativas e prazo próprio.
-        timeout-minutes: 20
+        timeout-minutes: 25
         run: |
-          sudo apt-get -o Acquire::Retries=5 update
-          sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 install -y --no-install-recommends ffmpeg fonts-dejavu-core
+          mkdir -p "$HOME/apt-cache/partial"
+          OPTS="-o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Dir::Cache::Archives=$HOME/apt-cache"
+          sudo apt-get $OPTS update
+          if ! sudo timeout 600 apt-get $OPTS install -y --no-install-recommends ffmpeg fonts-dejavu-core; then
+            echo "::warning::espelho do apt lento/fora do ar; tentando archive.ubuntu.com"
+            sudo sed -i -E 's#http://[^ ]*ubuntu\.com/ubuntu#http://archive.ubuntu.com/ubuntu#g' /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list 2>/dev/null || true
+            sudo apt-get $OPTS update
+            sudo timeout 600 apt-get $OPTS install -y --no-install-recommends ffmpeg fonts-dejavu-core
+          fi
+          sudo chown -R "$USER" "$HOME/apt-cache"
+          ffmpeg -version | head -1
           ffmpeg -version | head -1
 
       - name: Testes de unidade (gtakit)
@@ -79,7 +93,12 @@ jobs:
       - name: Garantir ffmpeg para o teste
         shell: pwsh
         run: |
+          # O setup-windows.ps1 acima instala o ffmpeg pelo winget, mas o PATH novo só vale em outro terminal:
+          # relê o PATH do registro e passa a pasta do ffmpeg para os próximos passos. Chocolatey só como reserva.
+          $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
           if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { choco install ffmpeg -y --no-progress }
+          $ff = Get-Command ffmpeg -ErrorAction Stop
+          Split-Path $ff.Source | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
           ffmpeg -version | Select-Object -First 1
 
       - name: Testes de unidade no Windows
