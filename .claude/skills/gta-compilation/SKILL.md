@@ -13,7 +13,7 @@ As partes automáticas de cada etapa rodam pela linha de comando do pacote `gtak
 py -3 -m gtakit <comando> projects/<slug>      # Windows
 python3 -m gtakit <comando> projects/<slug>    # Linux/macOS
 ```
-`init → discovery → approve → probe → analyze → audio → render → thumbnail → shorts`, mais `validate` (confere os JSON entre etapas) e `status` (o que já foi feito). O `--help` de cada comando explica as opções.
+`init → discovery → approve → probe → audio --full (transcrição) → analyze/rank → audio → render → thumbnail → shorts`, mais `validate` (confere os JSON entre etapas) e `status` (o que já foi feito). O `--help` de cada comando explica as opções.
 - **Retomar um compilado:** rode `status` e continue da primeira etapa não concluída.
 - **Antes de cada etapa que lê arquivos de outra**, rode `validate`; se apontar problema, corrija antes de seguir.
 - As decisões (o que aprovar, o que é engraçado, a tradução, títulos) continuam sendo suas e do usuário; o `gtakit` só mede, corta e monta.
@@ -21,7 +21,7 @@ python3 -m gtakit <comando> projects/<slug>    # Linux/macOS
 | # | Skill | Gera |
 |---|---|---|
 | 1 | `gta-video-discovery` | `discovery.json`, `source/*.mp4` |
-| 2 | `viral-moment-analyzer` | `moments.json` |
+| 2 | `viral-moment-analyzer` | `moments.json` + `ranking.md` (ranking dos clipes por 6 critérios) |
 | 3 | `video-translator` | `subs/*.pt.srt` (só falas em outro idioma) |
 | 4 | `video-editor` | `output/compilation.mp4`, `output/chapters.json` |
 | 5 | `youtube-publisher` | `output/metadata.json`, `output/description.txt` |
@@ -40,7 +40,7 @@ python3 -m gtakit <comando> projects/<slug>    # Linux/macOS
 ## Execução
 Siga cada skill na ordem acima. Pontos de **parada obrigatória** (espere o usuário aprovar):
 - **Após a etapa 1:** lista dos vídeos ordenados pela nota de viralidade, antes de baixar. Em seguida, entregue `permissions.md` com as mensagens de pedido de permissão para o usuário enviar.
-- **Após a etapa 2:** momentos escolhidos (vídeo, início–fim, motivo), antes de editar.
+- **Após a etapa 2:** a tabela do `ranking.md` (notas por critério, corte recomendado, justificativa, alertas e duplicados), antes de editar. O usuário pode trocar a seleção.
 - **Após a etapa 5:** título, texto e imagem da thumbnail, descrição e o resultado do `gtakit ready` (quem ainda não autorizou), antes de qualquer publicação. Créditos não substituem autorização; aceitar o risco é decisão **explícita** do usuário (`--accept-risk`).
 
 As etapas 3 e 4 rodam sem parada, mas mostre uma amostra das legendas traduzidas.

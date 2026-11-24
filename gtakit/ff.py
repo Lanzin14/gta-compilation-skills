@@ -102,3 +102,48 @@ def dead_time(path, cwd=None):
     f = lambda pat: [float(x) for x in re.findall(pat, out)]
     return {"silence_start": f(r"silence_start: ([\d.]+)"), "silence_end": f(r"silence_end: ([\d.]+)"),
             "freeze_start": f(r"freeze_start: ([\d.]+)"), "freeze_end": f(r"freeze_end: ([\d.]+)")}
+
+
+def visual_stats(path, cwd=None):
+    """A cada 0,5 s: (t, movimento 0–100 [scdet], brilho médio 0–255 [YAVG], borrão [blurdetect, maior = mais borrado])."""
+    rc, out = run(["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-an", "-vf",
+                   "fps=2,scdet=threshold=100,signalstats,blurdetect,metadata=print", "-f", "null", "-"], cwd)
+    if rc:
+        raise FFmpegError(f"medição visual falhou em {path}: {out.strip()[-300:]}")
+    sc = [float(x) for x in re.findall(r"lavfi\.scd\.score=([\d.]+)", out)]
+    ya = [float(x) for x in re.findall(r"lavfi\.signalstats\.YAVG=([\d.]+)", out)]
+    bl = [float(x) for x in re.findall(r"lavfi\.blur=([\d.]+)", out)]
+    n = min(len(sc), len(ya), len(bl))
+    return [(round(i * 0.5, 2), sc[i], ya[i], bl[i]) for i in range(n)]
+
+
+def loudness(path, cwd=None):
+    """Volume integrado (LUFS) e pico real (dBFS) do vídeo inteiro; None se não houver áudio."""
+    rc, out = run(["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-vn", "-af", "ebur128=peak=true",
+                   "-f", "null", "-"], cwd)
+    if rc:
+        return None
+    i = re.findall(r"^\s+I:\s+(-?[\d.]+|-inf) LUFS", out, re.M)
+    pk = re.findall(r"^\s+Peak:\s+(-?[\d.]+|-inf) dBFS", out, re.M)
+    if not i:
+        return None
+    to_f = lambda s: float("-inf") if s == "-inf" else float(s)
+    return {"lufs": to_f(i[-1]), "true_peak_dbfs": to_f(pk[-1]) if pk else None}
+
+
+def frame_hashes(path, fps=2, cwd=None):
+    """'Impressão digital' (dHash de 64 bits) de cada quadro, a `fps` quadros/s — para achar repetição e duplicados."""
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-an", "-vf",
+                        f"fps={fps},scale=9:8:flags=area,format=gray", "-f", "rawvideo", "-"],
+                       capture_output=True, cwd=cwd)
+    if r.returncode:
+        raise FFmpegError(f"hash de quadros falhou em {path}: {r.stderr.decode('utf-8', 'replace')[-300:]}")
+    data, hashes = r.stdout, []
+    for off in range(0, len(data) - 71, 72):
+        px = data[off:off + 72]
+        bits = 0
+        for row in range(8):
+            for col in range(8):
+                bits = (bits << 1) | (px[row * 9 + col] > px[row * 9 + col + 1])
+        hashes.append(bits)
+    return hashes

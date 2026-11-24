@@ -8,8 +8,10 @@ Comandos (na ordem do fluxo):
   discovery  lê raw_meta.jsonl (saída do yt-dlp --dump-json) e gera discovery.json com a nota de viralidade
   approve    marca vídeos aprovados/recusados pelo usuário
   probe      confere os vídeos baixados em source/ (duração, tamanho, áudio)
-  analyze    mede áudio/cenas/tempo morto e gera moments.json
-  audio      extrai o áudio de cada momento (subs/<id>.wav) para a transcrição
+  audio      --full: áudio do vídeo inteiro (subs/<video_id>.full.wav) para transcrever ANTES do ranking;
+             sem --full: áudio de cada momento (subs/<id>.wav) para a legenda
+  analyze    mede tudo (cache em analysis/) e gera moments.json com o ranking dos clipes + ranking.md
+  rank       refaz só o ranking (sem medir de novo), após transcrições ou avaliações em judgments.json
   render     corta, padroniza e junta os clipes; gera output/compilation.mp4 e output/timeline.json
   thumbnail  gera output/thumbnail.jpg no pico do melhor momento
   shorts     gera os Shorts verticais em output/shorts/
@@ -27,7 +29,7 @@ import re
 import sys
 import time
 
-from . import analysis, ff, render, rights, timeline, viral
+from . import analysis, ff, ranking, render, rights, timeline, viral
 from .project import Project, load_json, save_json
 
 
@@ -160,10 +162,50 @@ def cmd_probe(proj, a):
     return 0
 
 
+def _measure_all(proj, vids, refresh=False):
+    """Medições de cada vídeo, com cache em analysis/<id>.json (medir é a parte lenta)."""
+    out = {}
+    for v in vids:
+        cache = proj.p("analysis", f"{v['id']}.json")
+        data = None if refresh else load_json(cache)
+        if data is None or data.get("_source") != v["local_path"]:
+            info = ff.media_info(v["local_path"], cwd=proj.dir)
+            data = ranking.measurements(v["local_path"], v["has_audio"], info, proj.dir, ff)
+            data["_source"] = v["local_path"]
+            save_json(cache, data)
+        out[v["id"]] = data
+    return out
+
+
+def _ranked(proj, refresh=False):
+    disc = _videos(proj)
+    vids = [v for v in disc["videos"] if v.get("approved") and v.get("local_path")]
+    meas = _measure_all(proj, vids, refresh)
+    transcripts = {v["id"]: load_json(proj.p("subs", f"{v['id']}.full.json")) for v in vids}
+    transcripts = {k: x for k, x in transcripts.items() if x is not None}
+    judgments = load_json(proj.p("judgments.json"), {})
+    cfg = ranking.load_config(proj.dir)
+    moments = analysis.number_moments(ranking.rank(vids, meas, transcripts, judgments, cfg))
+    save_json(proj.p("moments.json"), {"moments": moments, "ranking_config": cfg["weights"]})
+    proj.p("ranking.md").write_text(ranking.report_markdown(moments, {v["id"]: v for v in vids}), encoding="utf-8")
+    proj.mark("analyze", "done", moments=len(moments), selected=sum(m["selected"] for m in moments),
+              transcripts=len(transcripts), judgments=len(judgments))
+    print(f"{'#':>3} {'id':<4} {'vídeo':<22} {'final':>5}  V  H  R  C  Q  T  corte            situação")
+    for i, m in enumerate(moments, 1):
+        c = m["ranking"]["criteria"]
+        print(f"{i:>3} {m['id']:<4} {m['video_id'][:22]:<22} {m['ranking']['final']:>5} "
+              f"{c['viralidade']:>2} {c['humor']:>2} {c['reacao']:>2} {c['contexto']:>2} {c['qualidade']:>2} {c['retencao']:>2} "
+              f"{m['start']:>6.1f}–{m['end']:<6.1f}s  {m['ranking']['selection_reason']}")
+    print(f"transcrições usadas: {len(transcripts)} | avaliações (judgments.json): {len(judgments)} | detalhes: ranking.md")
+    return 0
+
+
 def cmd_analyze(proj, a):
     disc = _videos(proj)
     if proj.p("moments.json").exists() and not a.force:
         return _err("moments.json já existe; use --force para refazer (apaga edições manuais)")
+    if not a.legacy:
+        return _ranked(proj, refresh=a.refresh)
     moments = []
     for v in disc["videos"]:
         if not (v.get("approved") and v.get("local_path")):
@@ -181,9 +223,30 @@ def cmd_analyze(proj, a):
     return 0
 
 
+def cmd_rank(proj, a):
+    if not proj.p("analysis").exists():
+        return _err("rode o analyze antes (não há medições em analysis/)")
+    return _ranked(proj)
+
+
 def cmd_audio(proj, a):
-    mom = load_json(proj.p("moments.json"))
     by = {v["id"]: v for v in _videos(proj)["videos"]}
+    if a.full:  # vídeo inteiro: transcrição antes do ranking (contexto/humor)
+        for v in by.values():
+            if not (v.get("approved") and v.get("local_path")):
+                continue
+            if not v.get("has_audio"):
+                print(f"{v['id']}: vídeo mudo, nada para transcrever")
+                continue
+            out = f"subs/{v['id']}.full.wav"
+            proj.p("subs").mkdir(exist_ok=True)
+            rc, o = ff.run(["ffmpeg", "-v", "error", "-y", "-i", v["local_path"], "-vn", "-ac", "1", "-ar", "16000", out],
+                           cwd=proj.dir)
+            if rc:
+                return _err(f"áudio de {v['id']}: {o.strip()[-300:]}")
+            print(f"{v['id']} -> {out}")
+        return 0
+    mom = load_json(proj.p("moments.json"))
     for m in mom["moments"]:
         if not m.get("selected"):
             continue
@@ -443,8 +506,12 @@ def main(argv=None):
     s.add_argument("--all", action="store_true")
     s.add_argument("--reject", action="store_true")
     add("probe", cmd_probe)
-    add("analyze", cmd_analyze).add_argument("--force", action="store_true")
-    add("audio", cmd_audio)
+    s = add("analyze", cmd_analyze)
+    s.add_argument("--force", action="store_true")
+    s.add_argument("--legacy", action="store_true", help="regras antigas (picos de volume), sem ranking")
+    s.add_argument("--refresh", action="store_true", help="ignora o cache de medições")
+    add("rank", cmd_rank)
+    add("audio", cmd_audio).add_argument("--full", action="store_true")
     add("render", cmd_render).add_argument("--preset", default="medium")
     add("thumbnail", cmd_thumbnail).add_argument("--line", action="append", required=True, help="uma linha do texto (repita para 2 linhas)")
     s = add("shorts", cmd_shorts)
