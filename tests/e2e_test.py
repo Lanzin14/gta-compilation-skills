@@ -340,6 +340,66 @@ def run_pipeline(root):
         check(False, "shorts com marca" + f": {o[-400:]}")
 
 
+def framing_pipeline(root):
+    """Projeto separado: o corte vertical segue a ação, e o estilo dividido mostra a câmera embaixo."""
+    print("== enquadramento dos Shorts")
+    P = root / "projects/enquadramento"
+    gtakit("init", P)
+    src = P / "source"
+    # quadrado branco andando da esquerda para a direita (a 'ação')
+    # (overlay recalcula a posição a cada quadro; o drawbox calcula uma vez só e o quadrado ficaria parado)
+    sh('ffmpeg -v error -y -f lavfi -i "color=c=black:s=1280x720:r=30:d=12" -f lavfi -i "color=c=white:s=160x160:r=30:d=12" '
+       '-f lavfi -i "sine=f=500:d=12:sample_rate=48000" '
+       "-filter_complex \"[0][1]overlay=x='60+85*t':y=280\" -c:v libx264 -preset ultrafast -c:a aac -shortest "
+       f'{src}/acao.mp4', root)
+    moving = sp.run(["ffmpeg", "-v", "error", "-i", f"{src}/acao.mp4", "-vf", "fps=1,scale=32:1,format=gray",
+                     "-f", "rawvideo", "-"], capture_output=True).stdout
+    check(moving[:32] != moving[-32:], "vídeo de teste: o quadrado realmente se move")
+    # 'gameplay' + câmera do streamer: bloco claro no canto inferior direito
+    sh('ffmpeg -v error -y -f lavfi -i "testsrc2=s=1280x720:r=30:d=12,'
+       'drawbox=x=960:y=500:w=320:h=220:color=white:t=fill" '
+       '-f lavfi -i "sine=f=300:d=12:sample_rate=48000" -c:v libx264 -preset ultrafast -c:a aac -shortest '
+       f'{src}/cam.mp4', root)
+    lines = [json.dumps({"id": vid, "extractor": "twitter", "webpage_url": f"https://x.com/{vid}/status/1{i}",
+                         "uploader": vid, "uploader_id": vid, "timestamp": NOW - 3600, "duration": 12,
+                         "like_count": 1000, "repost_count": 100, "comment_count": 10, "description": "kkkk"})
+             for i, vid in enumerate(("acao", "cam"))]
+    (P / "raw_meta.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    for cmd in (("discovery", P, "--now", NOW), ("approve", P, "--all"), ("probe", P), ("analyze", P),
+                ("facecam", P, "cam", "--box", "0.75,0.694,0.25,0.306")):
+        rc, o = gtakit(*cmd)
+        if rc:
+            check(False, f"preparar enquadramento ({cmd[0]}): {o[-300:]}")
+            return
+    rc, o = gtakit("shorts", P, "--count", "2", "--preset", "ultrafast")
+    check(rc == 0, "gtakit shorts com enquadramento automático" + ("" if rc == 0 else f": {o[-500:]}"))
+    if rc:
+        return
+    items = json.loads((P / "output/shorts/shorts.json").read_text(encoding="utf-8"))
+    mom = {x["id"]: x["video_id"] for x in json.loads((P / "moments.json").read_text(encoding="utf-8"))["moments"]}
+    by_vid = {mom[x["moment_id"]]: x for x in items}
+    check(by_vid.get("acao", {}).get("layout") == "crop" and by_vid.get("cam", {}).get("layout") == "split",
+          f"auto escolhe recorte para ação concentrada e dividido com câmera marcada "
+          f"({ {k: v.get('layout') for k, v in by_vid.items()} })")
+
+    def centroid_x(file, t):
+        r = sp.run(["ffmpeg", "-v", "error", "-ss", str(t), "-i", file, "-frames:v", "1", "-vf",
+                    "scale=54:96,format=gray", "-f", "rawvideo", "-"], capture_output=True, cwd=P)
+        px = r.stdout
+        tot = sum(px)
+        return sum((i % 54 + 0.5) / 54 * v for i, v in enumerate(px)) / tot if tot else None
+
+    f = f"output/shorts/{by_vid['acao']['file']}"
+    xs = [centroid_x(f, t) for t in (2, 5, 8)]
+    check(all(x is not None and 0.3 <= x <= 0.7 for x in xs),
+          f"recorte segue a ação: o quadrado fica perto do centro do Short ({', '.join(f'{x:.2f}' for x in xs)})")
+    r = sp.run(["ffmpeg", "-v", "error", "-ss", "3", "-i", f"output/shorts/{by_vid['cam']['file']}", "-frames:v", "1",
+                "-vf", "scale=27:48,format=gray", "-f", "rawvideo", "-"], capture_output=True, cwd=P)
+    top, bottom = r.stdout[:27 * 24], r.stdout[27 * 24:]
+    check(sum(bottom) / len(bottom) > 200 and sum(top) / len(top) < 200,
+          "dividido: câmera do streamer (bloco claro) ocupa a metade de baixo")
+
+
 def test_transcribe_script():
     print("== scripts/transcribe.py")
     import importlib.util
@@ -388,6 +448,7 @@ def main():
     root = pathlib.Path(tempfile.mkdtemp(prefix="gta-e2e-"))
     try:
         run_pipeline(root)
+        framing_pipeline(root)
     finally:
         if "--keep" in sys.argv:
             print(f"Arquivos mantidos em {root}")
