@@ -68,8 +68,10 @@ def sheet_args(files, out):
         args += ["-i", f]
     parts, labels = [], []
     for i in range(n):
-        parts.append(f"[{i}:v]scale=640:360,drawtext=text='{i + 1}':fontsize=72:fontcolor=white:borderw=5:"
-                     f"bordercolor=black:x=20:y=10[t{i}]")
+        # número no canto inferior direito: não cobre o texto em nenhum dos dois estilos
+        parts.append(f"[{i}:v]scale=640:360,drawbox=x=iw-110:y=ih-100:w=100:h=90:color=black@0.6:t=fill,"
+                     f"drawtext=text='{i + 1}':fontsize=72:fontcolor=white:borderw=4:bordercolor=black:"
+                     f"x=w-60-tw/2:y=h-55-th/2[t{i}]")
         labels.append(f"[t{i}]")
     if n % 2:
         parts.append("color=c=black:s=640x360:d=1[pad]")

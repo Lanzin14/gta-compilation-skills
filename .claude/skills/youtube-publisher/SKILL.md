@@ -38,13 +38,20 @@ description: Prepara título, descrição, tags, capítulos, créditos e demais 
 4. **Thumbnail** (gerada automaticamente):
    1. O quadro é escolhido pelo `gtakit`: momento de maior nota que tenha `peak_time`, em `tempo_no_compilado = clip_start + (peak_time − start)` (`clip_start` vem do `output/timeline.json`). Sem nenhum `peak_time`, usa o meio do último clipe e avisa.
    2. Proponha 3 textos curtos e deixe o usuário escolher: **2–4 palavras, MAIÚSCULAS, no máx. 2 linhas de até 14 caracteres** (ex.: `CAPOTOU` / `NA RAMPA!`). O texto tem que descrever algo que acontece no vídeo.
-   3. Gere a imagem com o texto escolhido (uma `--line` por linha):
+   3. **Recomendado: várias opções.** Gere candidatas de momentos diferentes, em 2 estilos (faixa embaixo / texto em cima), e mostre a folha numerada ao usuário:
+      ```bash
+      py -3 -m gtakit thumbnails projects/<slug> --line "CAPOTOU" --line "NA RAMPA!" --count 4
+      py -3 -m gtakit thumbnail-pick projects/<slug> <número escolhido>
+      ```
+      - Para cada um dos melhores momentos, testa o quadro do pico e ±0,5 s/+1 s e fica com o mais nítido; descarta quadros **escuros** (brilho < 40), **borrados** e **quase iguais** a outra candidata (o comando lista o que descartou e por quê).
+      - Folha de comparação: `output/thumbs/escolha.jpg`; detalhes em `output/thumbs/candidatas.json`. Com a marca ativa, o estilo "topo" usa a cor da marca.
+   4. Opção rápida (uma só imagem, no pico do melhor momento), com o texto escolhido (uma `--line` por linha):
       ```bash
       py -3 -m gtakit thumbnail projects/<slug> --line "CAPOTOU" --line "NA RAMPA!"
       ```
       - O texto vai por `textfile=` (acentos, `:` e `'` funcionam sem escapar); faixa escura na metade de baixo + texto amarelo com borda preta, legível no celular.
       - O comando confere **1280x720** e **menos de 2 MB** (limite do YouTube) e diz em que segundo pegou o quadro.
-   4. Abra a imagem: se o quadro for um corte de cena borrado ou o texto sair cortado, avise e ajuste (texto mais curto).
+   5. Abra a imagem escolhida: se o texto sair cortado, encurte o texto e gere de novo.
 5. **Confira os direitos** (obrigatório antes de dizer que está pronto):
    ```bash
    py -3 -m gtakit ready projects/<slug>
