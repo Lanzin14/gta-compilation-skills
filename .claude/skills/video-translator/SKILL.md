@@ -13,7 +13,7 @@ Terceira etapa: **discovery → viral-moment-analyzer → video-translator → v
 
 ## Pré-requisitos
 - `ffmpeg`.
-- Whisper: `openai-whisper` (`pip install openai-whisper`) ou `faster-whisper`. Se faltar, peça autorização antes de instalar (baixa modelos de centenas de MB).
+- Whisper: `faster-whisper` (recomendado: várias vezes mais rápido, sem PyTorch) ou `openai-whisper`. O `scripts/transcribe.py` usa o que estiver instalado. Se nenhum estiver, peça autorização antes de instalar (o modelo `small` baixa ~460 MB no primeiro uso).
 
 ## Passos
 1. Extraia o áudio só do trecho do momento (mono 16 kHz, formato ideal para o Whisper):
@@ -21,12 +21,13 @@ Terceira etapa: **discovery → viral-moment-analyzer → video-translator → v
    ffmpeg -ss <start> -t <duração> -i <source> -vn -ac 1 -ar 16000 projects/<slug>/subs/<id>.wav
    ```
    `<duração>` = `end - start`; use os mesmos valores do corte da video-editor, senão a legenda sai fora de sincronia.
-2. Transcreva **sem informar o idioma** (o Whisper detecta sozinho) e gere SRT + JSON:
+2. Transcreva **sem informar o idioma** (o Whisper detecta sozinho):
    ```bash
-   whisper projects/<slug>/subs/<id>.wav --model small --task transcribe \
-     --output_format all --output_dir projects/<slug>/subs/
+   py -3 scripts/transcribe.py projects/<slug>/subs/<id>.wav --out-dir projects/<slug>/subs/ --model small
    ```
-   - O idioma detectado está no campo `"language"` de `<id>.json` (também aparece no log como `Detected language: ...`).
+   (Linux/macOS: `python3` no lugar de `py -3`.)
+   - Gera `<id>.srt` e `<id>.json` com `language`, `language_probability` (confiança 0–1; `null` no openai-whisper) e `text`.
+   - Código de saída 2 = nenhum motor instalado (a mensagem diz como instalar).
    - Os tempos do `.srt` já ficam relativos ao início do corte. Renomeie para `<id>.<idioma>.srt`.
 3. **Decida se precisa de legenda** e grave em `moments.json` `"language"` e `"needs_translation"`:
    | Situação | Ação |
@@ -34,6 +35,7 @@ Terceira etapa: **discovery → viral-moment-analyzer → video-translator → v
    | Idioma ≠ `pt` e há fala (texto com ≥ 3 palavras) | `needs_translation: true` → passo 4 |
    | Idioma = `pt` | `needs_translation: false` → sem legenda |
    | Sem fala, só música/ruído, ou texto repetitivo/sem sentido | `needs_translation: false`, `language: null` → sem legenda |
+   | `language_probability` < 0,5 (detecção incerta — comum com barulho de jogo) | `needs_translation: false`, `language: null` → sem legenda; avise o usuário |
    Nunca invente falas para preencher a legenda.
 4. Traduza cada bloco do `.srt` para PT-BR **mantendo números e tempos**:
    - Linguagem natural de gamer brasileiro, curta (máx. 42 caracteres por linha, 2 linhas).

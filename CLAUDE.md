@@ -4,7 +4,8 @@ Skills do Claude Code que produzem compilados de GTA para o YouTube a partir de 
 
 ## Estrutura
 - `.claude/skills/<nome>/SKILL.md` — uma skill por etapa; `gta-compilation` orquestra todas.
-- Fluxo: `gta-video-discovery → viral-moment-analyzer → video-translator → video-editor → youtube-publisher`.
+- Fluxo: `gta-video-discovery → viral-moment-analyzer → video-translator → video-editor → youtube-publisher` (+ `youtube-shorts`, opcional).
+- `scripts/transcribe.py` — transcrição + detecção de idioma (faster-whisper, ou openai-whisper como reserva).
 - Cada compilado vive em `projects/<slug>/` (ignorado pelo Git: contém vídeos e textos de terceiros).
 - `tests/e2e_test.py` — teste ponta a ponta com vídeos sintéticos; roda no GitHub Actions a cada PR.
 - `scripts/setup-windows.ps1` e `docs/INSTALACAO-WINDOWS.md` — instalação no Windows.

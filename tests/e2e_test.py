@@ -136,7 +136,7 @@ def run_pipeline(root):
     print("== 2. viral-moment-analyzer")
     moments = []
     for v in vids:
-        path, sig, peaks = v["local_path"], [], []
+        path, sig, peaks, loudest = v["local_path"], [], [], None
         if v["has_audio"]:
             rms = f"projects/teste/subs/{v['id']}_rms.txt"
             sh(f'ffmpeg -v error -i {path} -af "aresample=48000,asetnsamples=n=24000:p=0,astats=metadata=1:reset=1,'
@@ -147,6 +147,7 @@ def run_pipeline(root):
             win = [(a, max(b, -60.0)) for a, b in win]  # silêncio conta como -60 dB
             med = st.median(b for _, b in win) if win else 0
             peaks = [a for a, b in win if b > -60 and b >= med + 6]
+            loudest = max(((b, a) for a, b in win if a in peaks), default=None)
         _, out = sh(f"ffmpeg -i {path} -vf \"select='gt(scene,0.4)',showinfo\" -f null - 2>&1", root)
         scenes = [float(x) for x in re.findall(r"pts_time:([\d.]+)", out)]
         rc, out = sh(f"ffmpeg -i {path} -af silencedetect=noise=-40dB:d=1 -vf freezedetect=n=0.003:d=1 "
@@ -163,10 +164,17 @@ def run_pipeline(root):
         if scenes: sig.append("scene_change")
         if any(0 < p - q <= 2 for p in peaks for q in peaks + scenes): sig.append("reaction")
         score = 30 * ("audio_peak" in sig) + 25 * ("scene_change" in sig) + 25 * ("reaction" in sig) + 20
+        # peak_time: pico de áudio mais alto; senão 1ª mudança de cena; senão null (regra da skill)
+        in_cut = [s_ for s_ in scenes if start <= s_ <= dur]
+        peak_time = loudest[1] if loudest else (in_cut[0] if in_cut else None)
         moments.append(dict(id=f"m{len(moments)+1:02d}", video_id=v["id"], source=path, start=start,
-                            end=round(dur, 2), score=score, signals=sig, peaks=peaks,
+                            end=round(dur, 2), score=score, signals=sig, peaks=peaks, peak_time=peak_time,
                             selected=bool({"audio_peak", "scene_change"} & set(sig)) and score >= 45))
     m = {x["video_id"]: x for x in moments}
+    check(all(x["peak_time"] is not None and x["start"] <= x["peak_time"] <= x["end"]
+              for x in moments if x["selected"]), "todo momento selecionado tem peak_time dentro do corte")
+    check(11.5 <= m["v1"]["peak_time"] <= 14 and 9.5 <= m["v3"]["peak_time"] <= 10.5,
+          "peak_time no grito (v1) e na mudança de cena do vídeo mudo (v3)")
     check(any(11.5 <= p <= 14 for p in m["v1"]["peaks"]), "v1: grito aos 12 s detectado")
     check(any(8.5 <= p <= 10.5 for p in m["v2"]["peaks"]), "v2: grito aos 9 s detectado mesmo com trecho mudo")
     check(not m["v5"]["peaks"], "v5: sem picos falsos em áudio constante")
@@ -224,6 +232,10 @@ def run_pipeline(root):
     if rc:
         return
     chap, t, pend = [], 0.0, None
+    t_clip = 0.0
+    for x in order:  # clip_start: onde cada clipe começa no compilado (regra da video-editor)
+        if "clip_dur" in x:
+            x["clip_start"] = round(t_clip, 3); t_clip += x["clip_dur"]
     for x in order:
         if "clip_dur" not in x: continue
         if pend: pend["moment_ids"].append(x["id"]); pend["dur"] += x["clip_dur"]
@@ -259,7 +271,8 @@ def run_pipeline(root):
 
     # thumbnail: quadro do pico do melhor momento (o que fecha o compilado), texto via textfile
     best = order[-1]
-    t_best = sum(x["clip_dur"] for x in order[:-1] if "clip_dur" in x) + (best["peaks"] or [best["clip_dur"] / 2])[0] - best["start"]
+    t_best = best["clip_start"] + (best["peak_time"] - best["start"])  # fórmula da youtube-publisher
+    check(best["clip_start"] <= t_best <= best["clip_start"] + best["clip_dur"], "quadro da thumbnail cai dentro do clipe certo")
     (P / "output/thumb_text.txt").write_text("NÃO ACREDITO:\nCAPOTOU!", encoding="utf-8")  # acento, ':' e '!'
     thumb = "projects/teste/output/thumbnail.jpg"
     rc, o = sh_drawtext(
@@ -271,6 +284,62 @@ def run_pipeline(root):
     if rc == 0:
         check(probe(thumb, "-show_entries stream=width,height", root) == "1280,720", "thumbnail em 1280x720")
         check((root / thumb).stat().st_size < 2 * 1024 * 1024, "thumbnail com menos de 2 MB (limite do YouTube)")
+
+    # ---- 6. youtube-shorts ----
+    print("== 6. youtube-shorts")
+    (P / "output/shorts").mkdir(parents=True, exist_ok=True)
+    # um horizontal com legenda (v1), um vertical (v2) e um mudo (v3): cobre todos os caminhos da skill
+    for n, vid in enumerate(("v1", "v2", "v3"), 1):
+        x = next(m for m in moments if m["video_id"] == vid)
+        v = by[vid]
+        start = x["start"]
+        dur = min(x["end"] - x["start"], 60.0)
+        base = ("scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,"
+                if v["height"] > v["width"] else
+                "split[a][b];[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:2[bg];"
+                "[b]scale=1080:-2[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,fps=30,")
+        subs = (f"subtitles={x['subtitle_pt']}:force_style='FontSize=13,Bold=1,Outline=3,MarginV=70,Alignment=2',"
+                if x.get("subtitle_pt") else "")
+        vf = base + subs + f"drawtext=text='{v['author_handle']}':x=(w-tw)/2:y=160:fontsize=48:fontcolor=white:borderw=3"
+        silence = "" if v["has_audio"] else "-f lavfi -i anullsrc=r=48000:cl=stereo -map 0:v -map 1:a -shortest"
+        loud = '-af "loudnorm=I=-14:TP=-1.5:LRA=11"' if v["has_audio"] else ""
+        out = f"projects/teste/output/shorts/{n:02d}_{x['id']}.mp4"
+        rc, o = sh_drawtext(f'ffmpeg -v error -y -ss {start} -t {dur:.3f} -i {x["source"]} {silence} -vf "{vf}" {loud} '
+                            f'-ar 48000 -ac 2 -c:v libx264 -preset ultrafast -crf 20 -c:a aac -b:a 192k '
+                            f'-movflags +faststart {out}', root)
+        tipo = ("vertical" if v["height"] > v["width"] else "horizontal") + \
+               (", mudo" if not v["has_audio"] else "") + (", legenda" if subs else "")
+        check(rc == 0, f"short {x['id']} ({tipo}) renderizado" + ("" if rc == 0 else f": {o.strip()[-300:]}"))
+        if rc:
+            continue
+        info = json.loads(sh(f"ffprobe -v error -show_entries stream=codec_type,width,height "
+                             f"-show_entries format=duration -of json {out}", root)[1])
+        st_ = {s_["codec_type"]: s_ for s_ in info["streams"]}
+        check(st_.get("video", {}).get("width") == 1080 and st_["video"].get("height") == 1920
+              and "audio" in st_ and float(info["format"]["duration"]) <= 60.5,
+              f"short {x['id']}: 1080x1920, com áudio, {float(info['format']['duration']):.1f}s ≤ 60 s")
+
+
+def test_transcribe_script():
+    print("== scripts/transcribe.py")
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("transcribe", REPO / "scripts/transcribe.py")
+    tr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tr)
+    srt = tr.format_srt([{"start": 0.0, "end": 1.2, "text": " No way! "},
+                         {"start": 1.5, "end": 1.5, "text": "tempo inválido"},
+                         {"start": 2.0, "end": 3.0, "text": "   "},
+                         {"start": 3661.25, "end": 3662.0, "text": "Did you see that?"}])
+    check(srt == "1\n00:00:00,000 --> 00:00:01,200\nNo way!\n\n2\n01:01:01,250 --> 01:01:02,000\nDid you see that?\n",
+          "format_srt: numera em sequência, descarta vazios/tempo inválido, formata horas e ms")
+    engine = tr.available_engine("auto")
+    if engine is None:
+        rc = sp.run([sys.executable, str(REPO / "scripts/transcribe.py"), "x.wav", "--out-dir", "x"],
+                    capture_output=True, text=True, encoding="utf-8")
+        check(rc.returncode == 2 and "pip install" in rc.stderr,
+              "sem motor de transcrição: sai com código 2 e explica como instalar")
+    else:
+        print(f"  (motor instalado: {engine}-whisper; transcrição real não é testada aqui)")
 
 
 def test_permission_template():
@@ -295,6 +364,7 @@ def main():
         sys.exit("ffmpeg/ffprobe não encontrados no PATH")
     test_frontmatter()
     test_permission_template()
+    test_transcribe_script()
     root = pathlib.Path(tempfile.mkdtemp(prefix="gta-e2e-"))
     try:
         run_pipeline(root)

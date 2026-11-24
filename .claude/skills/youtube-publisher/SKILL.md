@@ -35,7 +35,7 @@ description: Prepara título, descrição, tags, capítulos, créditos e demais 
    - Todos os autores usados em `moments.json` devem aparecer nos créditos.
 3. **Tags**: 10–15 tags, total < 500 caracteres, mistura PT/EN (`gta 5`, `gta rp`, `gta funny moments`, `fails gta`...).
 4. **Thumbnail** (gerada automaticamente):
-   1. Escolha o quadro: o pico de áudio/cena do momento de maior nota, convertido para o tempo no compilado (`start` do capítulo + posição do pico dentro do clipe). Prefira um quadro com ação visível, não um corte de cena.
+   1. Escolha o quadro do momento de maior nota que tenha `peak_time`: `tempo_no_compilado = clip_start + (peak_time − start)` (campos do `moments.json`). Se nenhum momento tiver `peak_time`, use o meio do clipe (`clip_start + duração/2`) e avise o usuário. Abra o quadro e, se for um corte de cena borrado, tente 0,5 s depois.
    2. Proponha 3 textos curtos e deixe o usuário escolher: **2–4 palavras, MAIÚSCULAS, no máx. 2 linhas de até 14 caracteres** (ex.: `CAPOTOU` / `NA RAMPA!`). O texto tem que descrever algo que acontece no vídeo.
    3. Grave o texto em `projects/<slug>/output/thumb_text.txt` (uma linha por linha da imagem, **sem quebra de linha no final**). Usar `textfile=` evita ter que escapar acentos, `:` e `'`.
    4. Gere a imagem:

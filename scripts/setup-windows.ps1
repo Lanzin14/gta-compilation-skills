@@ -79,6 +79,19 @@ py -3 -m pip install --user --upgrade pip
 py -3 -m pip install --user --upgrade @packages
 if ($LASTEXITCODE -ne 0) { throw 'pip falhou ao instalar os pacotes.' }
 
+# faster-whisper: transcricao varias vezes mais rapida. Opcional: se falhar (ex.: Python novo
+# demais sem versao pronta), o scripts\transcribe.py usa o openai-whisper instalado acima.
+$hasFaster = $false
+if (-not $SkipWhisper) {
+    py -3 -m pip install --user --upgrade faster-whisper
+    if ($LASTEXITCODE -eq 0) {
+        $hasFaster = $true
+        Write-Ok 'faster-whisper instalado'
+    } else {
+        Write-Warn2 'faster-whisper nao instalou; a transcricao vai usar o openai-whisper (mais lento).'
+    }
+}
+
 # Os executaveis do pip --user ficam numa pasta Scripts que nem sempre esta no PATH.
 $scripts = (py -3 -c "import sysconfig; print(sysconfig.get_path('scripts', 'nt_user'))").Trim()
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -96,6 +109,7 @@ $checks = [ordered]@{
     'yt-dlp'  = { yt-dlp --version }
 }
 if (-not $SkipWhisper) { $checks['whisper'] = { whisper --help | Select-Object -First 1 } }
+if ($hasFaster) { $checks['faster-whisper'] = { py -3 -c "import faster_whisper; print('faster-whisper', faster_whisper.__version__)" } }
 
 $failed = @()
 foreach ($name in $checks.Keys) {

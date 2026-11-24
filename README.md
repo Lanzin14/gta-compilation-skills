@@ -17,7 +17,8 @@ gta-video-discovery → viral-moment-analyzer → video-translator → video-edi
 | `viral-moment-analyzer` | Identificar os melhores momentos |
 | `video-translator` | Detectar idioma e legendar em PT-BR |
 | `video-editor` | Montar o compilado |
-| `youtube-publisher` | Título, descrição e metadados |
+| `youtube-publisher` | Título, descrição, thumbnail e metadados |
+| `youtube-shorts` | Shorts verticais (1080x1920, até 60 s) dos melhores momentos |
 
 Os arquivos de cada compilado ficam em `projects/<slug>/`.
 
