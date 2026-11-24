@@ -160,3 +160,22 @@ def loudnorm_measure(path, start, duration, cwd=None):
         return json.loads(block)
     except ValueError:
         return None
+
+
+def frame_probe(video, t, cwd=None):
+    """Um quadro em t: (brilho médio 0–255, índice de borrão, dHash de 64 bits)."""
+    r = subprocess.run(["ffmpeg", "-v", "info", "-hide_banner", "-nostats", "-ss", f"{t:.2f}", "-i", str(video),
+                        "-frames:v", "1", "-an", "-vf",
+                        "signalstats,blurdetect,metadata=print,scale=9:8:flags=area,format=gray",
+                        "-f", "rawvideo", "-"], capture_output=True, cwd=cwd)
+    err = r.stderr.decode("utf-8", "replace")
+    if r.returncode or len(r.stdout) < 72:
+        raise FFmpegError(f"quadro em {t:.2f}s de {video}: {err.strip()[-300:]}")
+    y = re.findall(r"lavfi\.signalstats\.YAVG=([\d.]+)", err)
+    b = re.findall(r"lavfi\.blur=([\d.]+)", err)
+    px = r.stdout[:72]
+    bits = 0
+    for row in range(8):
+        for col in range(8):
+            bits = (bits << 1) | (px[row * 9 + col] > px[row * 9 + col + 1])
+    return float(y[0]) if y else 0.0, float(b[0]) if b else 0.0, bits

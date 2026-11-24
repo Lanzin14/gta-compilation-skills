@@ -226,6 +226,17 @@ def run_pipeline(root):
         check(best["clip_start"] <= t_best <= best["clip_start"] + best["clip_dur"], "quadro da thumbnail cai dentro do clipe certo")
         check(probe("output/thumbnail.jpg", "-show_entries stream=width,height", P) == "1280,720", "thumbnail em 1280x720")
         check((P / "output/thumbnail.jpg").stat().st_size < 2 * 1024 * 1024, "thumbnail com menos de 2 MB (limite do YouTube)")
+    rc, o = gtakit("thumbnails", P, "--line", "QUE ISSO", "--line", "MANO!", "--count", "3")
+    cands = json.loads((P / "output/thumbs/candidatas.json").read_text(encoding="utf-8")) if rc == 0 else []
+    check(rc == 0 and len({c["moment_id"] for c in cands}) >= 2 and {c["style"] for c in cands} == {"faixa", "topo"},
+          f"thumbnails: {len(cands)} candidatas de {len({c['moment_id'] for c in cands})} momentos, 2 estilos"
+          + ("" if rc == 0 else f": {o[-400:]}"))
+    check(all(probe(c["file"], "-show_entries stream=width,height", P) == "1280,720" and c["kb"] < 2048 for c in cands),
+          "todas as candidatas em 1280x720 e < 2 MB")
+    check((P / "output/thumbs/escolha.jpg").exists(), "folha de comparação numerada gerada")
+    rc, o = gtakit("thumbnail-pick", P, "2")
+    check(rc == 0 and (P / "output/thumbnail.jpg").read_bytes() == (P / cands[1]["file"]).read_bytes(),
+          "thumbnail-pick copia a candidata escolhida")
 
     # ---- 6. youtube-shorts ----
     print("== 6. youtube-shorts")
